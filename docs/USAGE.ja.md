@@ -248,10 +248,17 @@ virtuoso/install_plugin.sh --uninstall
    - `zip` = 各グループを同じ長さのリストで**同時に**進める（ロックステップ）
 4. **Fixed devices**(リスト選択)+ **Fixed gm/ID / L**(数字)+
    **Add fixed group** で固定グループを追加(複数可、**Clear** で消去)。
-5. **Analysis**(ac/tran/dc)、**Metric**(DC利得・位相余裕・GBW・
-   ユニティゲイン周波数・帯域幅 など)+ **on net**(ネット名)を選ぶと、
-   `phaseMargin(v("out"))` のような ADE 式が自動生成されます。**Goal** で
-   最大化/最小化を選択。
+5. **Analysis**(ac/tran/dc)と **Metric** を選択。指標は **net**/**net2**
+   ドロップダウンと **t1/t2/しきい値** の数値から ADE 式を自動生成します。
+   - AC 系: DC利得・位相余裕・GBW・ユニティゲイン周波数・帯域幅
+   - **tran(時間)系**: `V(net) at t1`、`dV net t1→t2`（2 時刻間の電圧差）、
+     `dV (net−net2) at t1` / `|net−net2| at t1`（差動＝コンパレータ出力など）、
+     `cross time @thr`（ネットがしきい値を横切る時刻＝判定時間）、
+     `settle t (net vs net2 @thr)`（コンパレータ整定＝\|net−net2\| がしきい値に
+     達する時刻）、`delay net→net2 @thr`、`peak-to-peak`
+   例: `value(v("out") 5e-7)-value(v("out") 1e-9)`、
+   `cross(abs(v("outp")-v("outn")) 0.9 1 "rising")`。**Goal** で最大化/最小化。
+   （時間系を使うときは Analysis=tran にしてください。）
 6. **Run sweep** — 各スイープ点でネットリストをサイジング(OP→LUT→OP)し、
    ADE 解析を実行。完了後、指標が各点で評価され、**Results** 表に最適点が
    マークされます。

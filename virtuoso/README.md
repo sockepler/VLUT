@@ -76,8 +76,8 @@ device / net / metric are all dropdowns or listboxes.
 | Sweep devices + gm/ID values + L + **Add sweep group** | pick devices, type a list of gm/ID values (`8 12 16`) and L, press Add — appended to the read-only "Sweep groups" box. Add **several** groups to sweep multiple device sets at once. |
 | Combine | `product` = every combination of the groups (nested 2-D+ sweep); `zip` = groups advance in lockstep (same-length lists, swept together) |
 | Fixed devices + gm/ID + L + **Add fixed group** | pick devices in the listbox, type gm/ID and L numbers, press Add — the group is appended to the read-only "Fixed groups" box (repeat for more groups; **Clear** resets) |
-| Analysis | dropdown (`ac`/`tran`/`dc`) |
-| Metric + on net | metric **type** dropdown (DC gain, phase margin, GBW, unity-gain freq, bandwidth, peak-to-peak, …) composed with a **net** dropdown → e.g. `phaseMargin(v("out"))` |
+| Analysis | dropdown (`ac`/`tran`/`dc`) — pick `tran` for the time metrics |
+| Metric + net/net2 + t1/t2/threshold | metric **type** dropdown composed from a **net** (and **net2**) dropdown and the numeric **t1/t2/threshold** fields. AC types: DC gain, phase margin, GBW, unity-gain freq, bandwidth. **tran (time) types**: `V(net) at t1`, `dV net t1→t2` (voltage difference between two times), `dV (net−net2) at t1` / `|net−net2| at t1` (differential, e.g. comparator outputs), `cross time @thr` (when a net crosses a level — decision time), `settle t (net vs net2 @thr)` (comparator settling: when \|net−net2\| reaches the level), `delay net→net2 @thr`, `peak-to-peak`. Composes to e.g. `value(v("out") 5e-7)-value(v("out") 1e-9)` or `cross(abs(v("outp")-v("outn")) 0.9 1 "rising")` |
 | Goal | maximize / minimize |
 | Waveform | waveform **type** dropdown (magnitude dB / phase / voltage) on the chosen net, plotted for the best point |
 

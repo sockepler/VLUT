@@ -22,26 +22,46 @@ VLUTScanDevs = nil    ; device names from the scanned netlist
 VLUTScanNets = nil    ; top-level net names from the scanned netlist
 VLUTWaveExpr = "v(\"out\")"
 
-;; metric templates: (label formula-with-%s-for-net) -- no typing needed
+;; metric templates: (label formula-with-tokens). Tokens @net@ @net2@
+;; @t1@ @t2@ @thr@ are filled from the form's dropdowns/number fields, so
+;; nothing is typed. AC metrics use @net@; tran metrics use times/threshold.
 VLUTMetricTypes = list(
-  list("DC gain [dB]"         "ymax(db20(v(\"%s\")))")
-  list("Unity-gain freq [Hz]" "cross(db20(v(\"%s\")) 0 1 \"falling\")")
-  list("Phase margin [deg]"   "phaseMargin(v(\"%s\"))")
-  list("Gain-BW product"      "gainBwProd(v(\"%s\"))")
-  list("Bandwidth -3dB [Hz]"  "bandwidth(v(\"%s\") 3 \"low\")")
-  list("Peak-to-peak"         "peakToPeak(v(\"%s\"))")
-  list("Max value"            "ymax(v(\"%s\"))")
-  list("Min value"            "ymin(v(\"%s\"))"))
+  ;; --- AC (choose Analysis = ac) ---
+  list("AC: DC gain [dB]"          "ymax(db20(v(\"@net@\")))")
+  list("AC: Unity-gain freq [Hz]"  "cross(db20(v(\"@net@\")) 0 1 \"falling\")")
+  list("AC: Phase margin [deg]"    "phaseMargin(v(\"@net@\"))")
+  list("AC: Gain-BW product"       "gainBwProd(v(\"@net@\"))")
+  list("AC: Bandwidth -3dB [Hz]"   "bandwidth(v(\"@net@\") 3 \"low\")")
+  ;; --- transient / time (choose Analysis = tran) ---
+  list("tran: V(net) at t1"        "value(v(\"@net@\") @t1@)")
+  list("tran: dV net t1->t2"       "value(v(\"@net@\") @t2@)-value(v(\"@net@\") @t1@)")
+  list("tran: dV (net-net2) at t1" "value(v(\"@net@\")-v(\"@net2@\") @t1@)")
+  list("tran: |net-net2| at t1"    "abs(value(v(\"@net@\")-v(\"@net2@\") @t1@))")
+  list("tran: cross time @thr [s]" "cross(v(\"@net@\") @thr@ 1 \"either\")")
+  list("tran: settle t (net vs net2 @thr) [s]"
+       "cross(abs(v(\"@net@\")-v(\"@net2@\")) @thr@ 1 \"rising\")")
+  list("tran: delay net->net2 @thr [s]"
+       "delay(?wf1 v(\"@net@\") ?value1 @thr@ ?edge1 \"either\" ?nth1 1 ?wf2 v(\"@net2@\") ?value2 @thr@ ?edge2 \"either\" ?nth2 1)")
+  list("tran: peak-to-peak"        "peakToPeak(v(\"@net@\"))"))
 
 VLUTWaveTypes = list(
-  list("Magnitude [dB]" "db20(v(\"%s\"))")
-  list("Phase [deg]"    "phase(v(\"%s\"))")
-  list("Voltage"        "v(\"%s\")"))
+  list("Magnitude [dB]"  "db20(v(\"@net@\"))")
+  list("Phase [deg]"     "phase(v(\"@net@\"))")
+  list("Voltage"         "v(\"@net@\")")
+  list("net - net2"      "v(\"@net@\")-v(\"@net2@\")"))
 
 procedure(VLUTLabels(templates) foreach(mapcar e templates car(e)))
-procedure(VLUTCompose(templates label net)
+
+;; fill @tokens@ in a template from a plist of (token . value) pairs
+procedure(VLUTFill(tmpl subs)
+  foreach(pair subs
+    tmpl = pcreReplace(pcreCompile(car(pair)) tmpl cadr(pair) 0))
+  tmpl)
+
+procedure(VLUTCompose(templates label subs)
   let((e) e = car(exists(x templates car(x) == label))
-    if(e then sprintf(nil cadr(e) net) else sprintf(nil "v(\"%s\")" net))))
+    if(e then VLUTFill(cadr(e) subs)
+       else VLUTFill("v(\"@net@\")" subs))))
 procedure(VLUTChomp(s)
   when(s while(rexMatchp("[ \t\n\r]$" s) s = substring(s 1 sub1(length(s)))))
   s)
@@ -142,10 +162,16 @@ procedure(VLUTWriteJob(form outdir)
     close(p)))
 
 procedure(VLUTRun(form)
-  let((outdir ts metric net)
-    net = form->metricnet->value
-    metric = VLUTCompose(VLUTMetricTypes form->metrictype->value net)
-    VLUTWaveExpr = VLUTCompose(VLUTWaveTypes form->wavetype->value net)
+  let((outdir ts metric subs)
+    ;; substitutions shared by metric + waveform composition
+    subs = list(
+      list("@net@"  form->metricnet->value)
+      list("@net2@" form->metricnet2->value)
+      list("@t1@"   sprintf(nil "%g" form->mt1->value))
+      list("@t2@"   sprintf(nil "%g" form->mt2->value))
+      list("@thr@"  sprintf(nil "%g" form->mthr->value)))
+    metric = VLUTCompose(VLUTMetricTypes form->metrictype->value subs)
+    VLUTWaveExpr = VLUTCompose(VLUTWaveTypes form->wavetype->value subs)
     ts = buildString(parseString(getCurrentTime() " :") "_")
     outdir = sprintf(nil "%s/vlut_runs/sweep_%s" getShellEnvVar("HOME") ts)
     createDirHier(outdir)
@@ -288,6 +314,10 @@ procedure(VLUTSaveVals(form)
     list('analysis   form->analysis->value)
     list('metrictype form->metrictype->value)
     list('metricnet  form->metricnet->value)
+    list('metricnet2 form->metricnet2->value)
+    list('mt1        form->mt1->value)
+    list('mt2        form->mt2->value)
+    list('mthr       form->mthr->value)
     list('goal       form->goal->value)
     list('wavetype   form->wavetype->value)
     list('report     form->report->value)))
@@ -484,14 +514,22 @@ procedure(VLUTBuildForm(saved)
           ?callback "VLUTClearFixed(VLUTForm)")
         hiCreateMLTextField(?name 'fixed ?prompt "Fixed groups" ?editable nil
           ?value VLUTGet(saved 'fixed ""))
-        ;; ---- analysis + metric (dropdown + net dropdown) ----
+        ;; ---- analysis + metric (dropdowns + net/net2 + time params) ----
         hiCreateCyclicField(?name 'analysis ?prompt "Analysis"
           ?choices list("ac" "tran" "dc")
           ?value VLUTGet(saved 'analysis "ac"))
         hiCreateCyclicField(?name 'metrictype ?prompt "Metric"
           ?choices mlabels ?value VLUTOneOf(saved 'metrictype mlabels))
-        hiCreateCyclicField(?name 'metricnet ?prompt "on net"
+        hiCreateCyclicField(?name 'metricnet ?prompt "net"
           ?choices nets ?value VLUTOneOf(saved 'metricnet nets))
+        hiCreateCyclicField(?name 'metricnet2 ?prompt "net2 (diff/delay)"
+          ?choices nets ?value VLUTOneOf(saved 'metricnet2 nets))
+        hiCreateFloatField(?name 'mt1 ?prompt "t1 [s] (tran)"
+          ?value VLUTGet(saved 'mt1 1e-9))
+        hiCreateFloatField(?name 'mt2 ?prompt "t2 [s] (tran)"
+          ?value VLUTGet(saved 'mt2 1e-6))
+        hiCreateFloatField(?name 'mthr ?prompt "threshold (V or level)"
+          ?value VLUTGet(saved 'mthr 0.9))
         hiCreateCyclicField(?name 'goal ?prompt "Goal"
           ?choices list("maximize" "minimize")
           ?value VLUTOneOf(saved 'goal list("maximize" "minimize")))
