@@ -39,21 +39,31 @@ both PDK selectors.
 
 ## Form fields
 
-| Field | Meaning |
-|-------|---------|
-| ADE netlist dir | directory holding the ADE-exported `input.scs` (the same one ADE ran). Get it from ADE: *Setup → Simulator → netlist dir*, or the maestro `…/netlist/` folder. |
-| Corner | model-lib section to size against (must have a LUT) |
-| Max unit W [um] | per-unit width cap; total W is split into `m` parallel units below it |
-| Max iterations | gm/ID sizing loop cap per sweep point |
-| Design variables | ADE design vars to override, e.g. `CL=2p Vcm=0.9` |
-| Fixed targets | devices held at a fixed gm/ID, one group per line: `M3 M4 : 10 L=0.7` (L in µm, optional) |
-| Sweep devices | device group whose gm/ID is swept, e.g. `M1 M2` |
-| Sweep gm/ID values | the swept values, e.g. `8 12 16 20` |
-| Sweep L [um] | optional L for the swept devices |
-| Analysis | which result to evaluate the metric on (`ac`/`tran`/`dc`) |
-| Metric | any ADE calculator expression, e.g. `gainBwProd(v("out"))`, `phaseMargin(v("out"))`, `ymax(db20(v("out")))`, `overshoot(v("out") …)` |
-| Goal | maximize / minimize the metric |
-| Waveform expr | expression plotted for the best point |
+Nothing is free-typed except numbers and design-variable parameters:
+the netlist directory comes from a file browser, and PDK / corner /
+device / net / metric are all dropdowns or listboxes.
+
+| Field | Input |
+|-------|-------|
+| ADE netlist dir | **Browse netlist dir…** button (native file chooser). Pick the folder holding the ADE `input.scs`. |
+| Scan devices/nets | reads the netlist and fills the device listboxes and net dropdowns below |
+| PDK | dropdown (every `pdks/*.yaml`) — sets the LUTs used |
+| Corner | dropdown, populated from the selected PDK |
+| Max unit W [um] | number — total W is split into `m` parallel units below this |
+| Max iterations | number — sizing-loop cap per sweep point |
+| Design variables | typed `A=1 CL=2p` (ADE design-variable overrides) |
+| Sweep devices | **listbox** (multi-select) of scanned devices |
+| Sweep gm/ID values | numbers, e.g. `8 12 16 20` |
+| Sweep L [um] | number (0 = keep current L) |
+| Fixed devices + gm/ID + L + **Add fixed group** | pick devices in the listbox, type gm/ID and L numbers, press Add — the group is appended to the read-only "Fixed groups" box (repeat for more groups; **Clear** resets) |
+| Analysis | dropdown (`ac`/`tran`/`dc`) |
+| Metric + on net | metric **type** dropdown (DC gain, phase margin, GBW, unity-gain freq, bandwidth, peak-to-peak, …) composed with a **net** dropdown → e.g. `phaseMargin(v("out"))` |
+| Goal | maximize / minimize |
+| Waveform | waveform **type** dropdown (magnitude dB / phase / voltage) on the chosen net, plotted for the best point |
+
+The metric/waveform dropdowns cover the common cases; to use an exotic
+formula, edit `VLUTMetricTypes` / `VLUTWaveTypes` at the top of
+`vlut_ade.il` (one line each: `("label" "formula-with-%s-for-net")`).
 
 ## Buttons
 

@@ -3,7 +3,8 @@ import sys
 
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QLabel,
-                             QComboBox, QToolBar, QWidget, QSizePolicy)
+                             QComboBox, QToolBar, QWidget, QSizePolicy,
+                             QPushButton)
 
 from .. import pdk as pdkmod
 from ..i18n import tr, set_lang, LANGS
@@ -48,6 +49,9 @@ class MainWindow(QMainWindow):
             self.pdk_sel.setCurrentIndex(idx)
         self.pdk_sel.currentIndexChanged.connect(self._pdk_changed)
         tb.addWidget(self.pdk_sel)
+        b_addpdk = QPushButton("＋ " + tr("add_pdk"))
+        b_addpdk.clicked.connect(self._add_pdk)
+        tb.addWidget(b_addpdk)
 
         tb.addWidget(QLabel("  %s: " % tr("corner")))
         self.corner_sel = QComboBox()
@@ -101,6 +105,16 @@ class MainWindow(QMainWindow):
         MosLUT._cache.clear()
         self.settings.setValue("pdk", name)
         self._rebuild()
+
+    def _add_pdk(self):
+        from .pdk_dialog import AddPdkDialog
+        dlg = AddPdkDialog(self)
+        if dlg.exec_() and getattr(dlg, "new_pdk_name", None):
+            pdkmod._registry = None
+            pdkmod.get(dlg.new_pdk_name)
+            MosLUT._cache.clear()
+            self.settings.setValue("pdk", dlg.new_pdk_name)
+            self._rebuild()
 
 
 def main():

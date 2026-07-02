@@ -47,8 +47,12 @@ engine is `vlut-cli` (`scan` / `run job.json` / `apply`). See
 
 PDKs are described by `pdks/<name>.yaml` — model lib path, corner
 sections, MOS devices with sweep grids, BJT/resistor/cap device lists.
-See [pdks/example.yaml.template](pdks/example.yaml.template). The
-descriptor files are gitignored: site-specific PDK data never leaves
+The desktop GUI can **create one for you**: the **＋ Add PDK** button in
+the toolbar opens a dialog that browses to a Spectre model library,
+auto-detects its corner sections and BSIM MOS models, and writes the
+yaml — no hand-editing needed for the gm/id core. See
+[pdks/example.yaml.template](pdks/example.yaml.template) for the format.
+The descriptor files are gitignored: site-specific PDK data never leaves
 your machine. Multiple PDKs can be installed side by side and switched
 from the toolbar; LUTs are stored per PDK in
 `luts/<pdk>_<dev>_<corner>.npz` (~1 min per device·corner to generate).

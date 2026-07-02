@@ -18,6 +18,33 @@ unless(isDir(strcat(VLUTRoot "/venv"))
   VLUTRoot = getShellEnvVar("VLUT_ROOT") || VLUTRoot)
 VLUTCli = strcat(VLUTRoot "/venv/bin/vlut-cli")
 VLUTState = nil   ; assoc-free list: (outdir analysis metric goal best xs ys)
+VLUTScanDevs = nil    ; device names from the scanned netlist
+VLUTScanNets = nil    ; top-level net names from the scanned netlist
+VLUTWaveExpr = "v(\"out\")"
+
+;; metric templates: (label formula-with-%s-for-net) -- no typing needed
+VLUTMetricTypes = list(
+  list("DC gain [dB]"         "ymax(db20(v(\"%s\")))")
+  list("Unity-gain freq [Hz]" "cross(db20(v(\"%s\")) 0 1 \"falling\")")
+  list("Phase margin [deg]"   "phaseMargin(v(\"%s\"))")
+  list("Gain-BW product"      "gainBwProd(v(\"%s\"))")
+  list("Bandwidth -3dB [Hz]"  "bandwidth(v(\"%s\") 3 \"low\")")
+  list("Peak-to-peak"         "peakToPeak(v(\"%s\"))")
+  list("Max value"            "ymax(v(\"%s\"))")
+  list("Min value"            "ymin(v(\"%s\"))"))
+
+VLUTWaveTypes = list(
+  list("Magnitude [dB]" "db20(v(\"%s\"))")
+  list("Phase [deg]"    "phase(v(\"%s\"))")
+  list("Voltage"        "v(\"%s\")"))
+
+procedure(VLUTLabels(templates) foreach(mapcar e templates car(e)))
+procedure(VLUTCompose(templates label net)
+  let((e) e = car(exists(x templates car(x) == label))
+    if(e then sprintf(nil cadr(e) net) else sprintf(nil "v(\"%s\")" net))))
+procedure(VLUTChomp(s)
+  when(s while(rexMatchp("[ \t\n\r]$" s) s = substring(s 1 sub1(length(s)))))
+  s)
 
 ;; ---------------------------------------------------------------- helpers
 procedure(VLUTTokens(s) parseString(s " \t"))
@@ -89,23 +116,28 @@ procedure(VLUTWriteJob(form outdir)
             fixed))))
     fprintf(p " \"fixed\": [%s],\n" buildString(reverse(fixed) ","))
     sweepl = form->sweepl->value
+    ;; sweepdevs is a listbox -> value is already a list of device names
     fprintf(p " \"sweep\": {\"devices\": [%s], \"gmid\": [%s]%s}\n"
-      VLUTDevsJson(VLUTTokens(form->sweepdevs->value))
+      VLUTDevsJson(form->sweepdevs->value)
       buildString(VLUTTokens(form->sweepvals->value) ",")
       if(sweepl != "" then sprintf(nil ", \"l\": %se-6" sweepl) else ""))
     fprintf(p "}\n")
     close(p)))
 
 procedure(VLUTRun(form)
-  let((outdir ts)
+  let((outdir ts metric net)
+    net = form->metricnet->value
+    metric = VLUTCompose(VLUTMetricTypes form->metrictype->value net)
+    VLUTWaveExpr = VLUTCompose(VLUTWaveTypes form->wavetype->value net)
     ts = buildString(parseString(getCurrentTime() " :") "_")
     outdir = sprintf(nil "%s/vlut_runs/sweep_%s" getShellEnvVar("HOME") ts)
     createDirHier(outdir)
     VLUTWriteJob(form outdir)
-    VLUTState = list(outdir form->analysis->value form->metric->value
+    VLUTState = list(outdir form->analysis->value metric
                      form->goal->value nil nil nil)
-    form->report->value = "running... progress in CIW"
-    printf("VLUT: sweep started -> %s\n" outdir)
+    form->report->value = sprintf(nil "running... metric=%s\nprogress in CIW"
+                                  metric)
+    printf("VLUT: sweep started (metric=%s) -> %s\n" metric outdir)
     ipcBeginProcess(sprintf(nil "%s run %s/job.json" VLUTCli outdir)
                     "" 'VLUTIpcData 'VLUTIpcData 'VLUTIpcDone)))
 
@@ -177,7 +209,7 @@ procedure(VLUTPlotBestWave(form)
   let((outdir aname best pts psf expr win)
     outdir = nth(0 VLUTState)  aname = nth(1 VLUTState)
     best = nth(4 VLUTState)
-    expr = form->waveexpr->value
+    expr = VLUTWaveExpr
     if(!best && best != 0 then printf("VLUT: run a sweep first\n")
     else
       pts = VLUTReadResults(outdir)
@@ -202,40 +234,151 @@ procedure(VLUTApplyBest()
       else printf("VLUT: apply failed (see shell output)\n")))))
 
 ;; ---------------------------------------------------------------- form/UI
-procedure(VLUT()
-  unless(boundp('VLUTForm) && hiIsForm(VLUTForm)
-    let((inv names)
-      inv = VLUTPdkInventory()
-      names = VLUTPdkNames(inv) || list("default")
+;; The form has no free-text device/dir/formula entry: netlist dir comes
+;; from a file browser, corner/PDK/device/net/metric from dropdowns and
+;; listboxes.  Only numbers and design-variable parameters are typed.
+
+procedure(VLUTPdkCorners(pdkname)
+  let((e) e = VLUTPdkEntry(VLUTPdkInventory() pdkname)
+    if(e then caddr(e) else list("tt"))))
+
+procedure(VLUTGet(saved sym dflt)
+  let((c) c = assoc(sym saved) if(c then cadr(c) else dflt)))
+
+procedure(VLUTSaveVals(form)
+  ;; snapshot current field values so a rebuild can restore them
+  list(
+    list('ndir       form->ndir->value)
+    list('pdksel     form->pdksel->value)
+    list('corner     form->corner->value)
+    list('wmax       form->wmax->value)
+    list('maxiter    form->maxiter->value)
+    list('params     form->params->value)
+    list('sweepdevs  form->sweepdevs->value)
+    list('sweepvals  form->sweepvals->value)
+    list('sweepl     form->sweepl->value)
+    list('fixed      form->fixed->value)
+    list('analysis   form->analysis->value)
+    list('metrictype form->metrictype->value)
+    list('metricnet  form->metricnet->value)
+    list('goal       form->goal->value)
+    list('wavetype   form->wavetype->value)
+    list('report     form->report->value)))
+
+;; browse for the ADE netlist directory with a native file chooser
+procedure(VLUTBrowseDir(form)
+  let((tmp p s)
+    tmp = sprintf(nil "%s/.cache/vlut_pick.txt" getShellEnvVar("HOME"))
+    sh(strcat("zenity --file-selection --directory "
+              "--title='Select ADE netlist dir (has input.scs)' > " tmp
+              " 2>/dev/null"))
+    p = errset(infile(tmp))
+    when(car(p)
+      s = gets(nil car(p)) close(car(p))
+      s = VLUTChomp(s)
+      when(s && s != "" form->ndir->value = s
+        VLUTScanNetlist(form)))))
+
+;; scan the netlist for device + net names, then rebuild with them filled
+procedure(VLUTScanNetlist(form)
+  let((dir out p line)
+    dir = form->ndir->value
+    if(dir == "" then printf("VLUT: pick a netlist dir first\n")
+    else
+      out = sprintf(nil "%s/.cache/vlut_scan.il" getShellEnvVar("HOME"))
+      sh(sprintf(nil "%s scan-il %s %s > %s 2>/dev/null"
+                 VLUTCli dir form->pdksel->value out))
+      p = errset(infile(out))
+      if(car(p) then
+        line = car(lineread(car(p))) close(car(p))
+        VLUTScanDevs = nth(0 line)
+        VLUTScanNets = nth(1 line)
+        printf("VLUT: scanned %d devices, %d nets\n"
+               length(VLUTScanDevs) length(VLUTScanNets))
+        VLUTBuildForm(VLUTSaveVals(form))
+      else printf("VLUT: scan failed for %s\n" dir)))))
+
+procedure(VLUTAddFixed(form)
+  ;; append the selected fixed-device group to the read-only summary
+  let((devs g txt)
+    devs = form->fixdevs->value
+    if(!devs then printf("VLUT: select devices for the fixed group\n")
+    else
+      g = sprintf(nil "%s : %g%s"
+            buildString(devs " ") form->fixgmid->value
+            if(form->fixl->value > 0.0
+               then sprintf(nil " L=%g" form->fixl->value) else ""))
+      txt = form->fixed->value
+      form->fixed->value = if(txt == "" then g else strcat(txt "\n" g)))))
+
+procedure(VLUTClearFixed(form) form->fixed->value = "")
+
+procedure(VLUTBuildForm(saved)
+  let((names corners devs nets mlabels wlabels)
+    names = VLUTPdkNames(VLUTPdkInventory()) || list("default")
+    corners = VLUTPdkCorners(VLUTGet(saved 'pdksel car(names)))
+    devs = VLUTScanDevs || list("(scan first)")
+    nets = VLUTScanNets || list("(scan first)")
+    mlabels = VLUTLabels(VLUTMetricTypes)
+    wlabels = VLUTLabels(VLUTWaveTypes)
+    when(boundp('VLUTForm) && hiIsForm(VLUTForm) hiDeleteForm(VLUTForm))
     hiCreateAppForm(
       ?name 'VLUTForm
       ?formTitle "VLUT gm/ID Sweep Sizing"
       ?buttonLayout 'Close
       ?fields list(
-        hiCreateStringField(?name 'ndir ?prompt "ADE netlist dir" ?defValue "")
+        hiCreateStringField(?name 'ndir ?prompt "ADE netlist dir" ?editable nil
+          ?value VLUTGet(saved 'ndir ""))
+        hiCreateButton(?name 'browsebtn ?buttonText "Browse netlist dir..."
+          ?callback "VLUTBrowseDir(VLUTForm)")
+        hiCreateButton(?name 'scanbtn ?buttonText "Scan devices/nets"
+          ?callback "VLUTScanNetlist(VLUTForm)")
         hiCreateCyclicField(?name 'pdksel ?prompt "PDK" ?choices names
-          ?value car(names))
-        hiCreateStringField(?name 'corner ?prompt "Corner" ?defValue "tt")
-        hiCreateFloatField(?name 'wmax ?prompt "Max unit W [um]" ?defValue 10.0)
-        hiCreateIntField(?name 'maxiter ?prompt "Max iterations" ?defValue 8)
+          ?value VLUTGet(saved 'pdksel car(names))
+          ?callback "VLUTBuildForm(VLUTSaveVals(VLUTForm))")
+        hiCreateCyclicField(?name 'corner ?prompt "Corner" ?choices corners
+          ?value VLUTGet(saved 'corner car(corners)))
+        hiCreateFloatField(?name 'wmax ?prompt "Max unit W [um]"
+          ?value VLUTGet(saved 'wmax 10.0))
+        hiCreateIntField(?name 'maxiter ?prompt "Max iterations"
+          ?value VLUTGet(saved 'maxiter 8))
         hiCreateStringField(?name 'params
-          ?prompt "Design variables (A=1 CL=2p)" ?defValue "")
-        hiCreateMLTextField(?name 'fixed
-          ?prompt "Fixed targets (per line: M3 M4 : 10 L=0.7)" ?defValue "")
-        hiCreateStringField(?name 'sweepdevs ?prompt "Sweep devices"
-          ?defValue "M1 M2")
+          ?prompt "Design variables (A=1 CL=2p)"
+          ?value VLUTGet(saved 'params ""))
+        ;; ---- sweep group (device listbox + numeric values) ----
+        hiCreateListBoxField(?name 'sweepdevs ?prompt "Sweep devices"
+          ?choices devs ?multipleSelect t
+          ?value VLUTGet(saved 'sweepdevs nil))
         hiCreateStringField(?name 'sweepvals ?prompt "Sweep gm/ID values"
-          ?defValue "8 12 16 20")
-        hiCreateStringField(?name 'sweepl
-          ?prompt "Sweep devices L [um] (opt)" ?defValue "")
+          ?value VLUTGet(saved 'sweepvals "8 12 16 20"))
+        hiCreateFloatField(?name 'sweepl ?prompt "Sweep L [um] (0=keep)"
+          ?value VLUTGet(saved 'sweepl 0.0))
+        ;; ---- fixed-group builder ----
+        hiCreateListBoxField(?name 'fixdevs ?prompt "Fixed devices"
+          ?choices devs ?multipleSelect t)
+        hiCreateFloatField(?name 'fixgmid ?prompt "Fixed gm/ID" ?value 10.0)
+        hiCreateFloatField(?name 'fixl ?prompt "Fixed L [um] (0=keep)"
+          ?value 0.0)
+        hiCreateButton(?name 'addfixbtn ?buttonText "Add fixed group"
+          ?callback "VLUTAddFixed(VLUTForm)")
+        hiCreateButton(?name 'clrfixbtn ?buttonText "Clear"
+          ?callback "VLUTClearFixed(VLUTForm)")
+        hiCreateMLTextField(?name 'fixed ?prompt "Fixed groups" ?editable nil
+          ?value VLUTGet(saved 'fixed ""))
+        ;; ---- analysis + metric (dropdown + net dropdown) ----
         hiCreateCyclicField(?name 'analysis ?prompt "Analysis"
-          ?choices list("ac" "tran" "dc") ?value "ac")
-        hiCreateStringField(?name 'metric ?prompt "Metric (ADE formula)"
-          ?defValue "gainBwProd(v(\"out\"))")
+          ?choices list("ac" "tran" "dc")
+          ?value VLUTGet(saved 'analysis "ac"))
+        hiCreateCyclicField(?name 'metrictype ?prompt "Metric"
+          ?choices mlabels ?value VLUTGet(saved 'metrictype car(mlabels)))
+        hiCreateCyclicField(?name 'metricnet ?prompt "on net"
+          ?choices nets ?value VLUTGet(saved 'metricnet car(nets)))
         hiCreateCyclicField(?name 'goal ?prompt "Goal"
-          ?choices list("maximize" "minimize") ?value "maximize")
-        hiCreateStringField(?name 'waveexpr ?prompt "Waveform expr (plot)"
-          ?defValue "db20(v(\"out\"))")
+          ?choices list("maximize" "minimize")
+          ?value VLUTGet(saved 'goal "maximize"))
+        hiCreateCyclicField(?name 'wavetype ?prompt "Waveform"
+          ?choices wlabels ?value VLUTGet(saved 'wavetype car(wlabels)))
+        ;; ---- actions ----
         hiCreateButton(?name 'runbtn ?buttonText "Run sweep"
           ?callback "VLUTRun(VLUTForm)")
         hiCreateButton(?name 'plotbtn ?buttonText "Plot metric vs gm/ID"
@@ -246,9 +389,12 @@ procedure(VLUT()
           ?callback "VLUTApplyBest()")
         hiCreateButton(?name 'mgrbtn ?buttonText "PDK / LUT Manager..."
           ?callback "VLUTMgr()")
-        hiCreateMLTextField(?name 'report ?prompt "Results" ?defValue "")))))
-  hiDisplayForm(VLUTForm)
-  t)
+        hiCreateMLTextField(?name 'report ?prompt "Results" ?editable nil
+          ?value VLUTGet(saved 'report ""))))
+    hiDisplayForm(VLUTForm)
+    t))
+
+procedure(VLUT() VLUTBuildForm(nil))
 
 ;; ------------------------------------------------- PDK / LUT manager form
 procedure(VLUTMgrStatusText(inv pdkname)

@@ -39,7 +39,29 @@ def scan(netlist_dir, pdk_name=None):
     devs = [dict(subckt=it.subckt or "", name=it.name, model=it.master,
                  w=it.w, l=it.l, m=it.m, count=len(it.paths))
             for it in nd.mos_items]
-    print(json.dumps(dict(devices=devs), indent=1))
+    print(json.dumps(dict(devices=devs, nets=_top_nets(nd)), indent=1))
+    return 0
+
+
+def _top_nets(nd):
+    """Top-level signal nets (for metric/waveform net dropdowns)."""
+    nl = nd.dd.netlist
+    nets = set()
+    for inst in nl.top_instances.values():
+        for n in inst.nodes:
+            nets.add(n)
+    skip = {"0", "gnd", "gnd!", "vss", "vss!", "vdd", "vdd!"}
+    out = [n for n in sorted(nets) if n.lower() not in skip]
+    return out or sorted(nets)
+
+
+def scan_il(netlist_dir, pdk_name=None):
+    """SKILL-readable scan: ((dev ...) (net ...))."""
+    pdk = pdkmod.get(pdk_name)
+    nd = NetlistDesign(netlist_dir, pdk=pdk)
+    devs = " ".join('"%s"' % it.name for it in nd.mos_items)
+    nets = " ".join('"%s"' % n for n in _top_nets(nd))
+    print("((%s) (%s))" % (devs, nets))
     return 0
 
 
@@ -206,6 +228,9 @@ def main():
         if cmd == "scan":
             sys.exit(scan(sys.argv[2],
                           sys.argv[3] if len(sys.argv) > 3 else None))
+        if cmd == "scan-il":
+            sys.exit(scan_il(sys.argv[2],
+                             sys.argv[3] if len(sys.argv) > 3 else None))
         if cmd == "run":
             sys.exit(run(sys.argv[2]))
         if cmd == "apply":
