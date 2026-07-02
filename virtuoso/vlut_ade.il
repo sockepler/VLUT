@@ -279,6 +279,32 @@ procedure(VLUTBrowseDir(form)
       when(s && s != "" form->ndir->value = s
         VLUTScanNetlist(form)))))
 
+;; one-click: netlist the current open ADE/Maestro session, import it here
+procedure(VLUTFromADE(form)
+  let((s dir)
+    s = car(errset(asiGetCurrentSession()))
+    if(!s then
+      hiDisplayAppDBox(?name 'VLUTNoAde ?dboxBanner "VLUT"
+        ?dboxText "No open ADE Explorer / Assembler session found."
+        ?dialogType hicWarningDialog ?buttonList list("OK"))
+    else
+      printf("VLUT: netlisting current ADE session...\n")
+      errset(asiNetlist(s))
+      dir = car(errset(asiGetNetlistDir(s)))
+      if(dir && isDir(dir) then
+        form->ndir->value = dir
+        printf("VLUT: imported ADE netlist %s\n" dir)
+        VLUTScanNetlist(form)
+      else
+        hiDisplayAppDBox(?name 'VLUTNoDir ?dboxBanner "VLUT"
+          ?dboxText "Netlist directory not found; run the ADE netlister once."
+          ?dialogType hicWarningDialog ?buttonList list("OK"))))))
+
+;; open the form and immediately pull the current ADE netlist
+procedure(VLUTOpenFromADE()
+  VLUT()
+  VLUTFromADE(VLUTForm))
+
 ;; scan the netlist for device + net names, then rebuild with them filled
 procedure(VLUTScanNetlist(form)
   let((dir out p line)
@@ -329,9 +355,12 @@ procedure(VLUTBuildForm(saved)
       ?fields list(
         hiCreateStringField(?name 'ndir ?prompt "ADE netlist dir" ?editable nil
           ?value VLUTGet(saved 'ndir ""))
-        hiCreateButton(?name 'browsebtn ?buttonText "Browse netlist dir..."
+        hiCreateButton(?name 'adebtn
+          ?buttonText "Netlist open ADE/Maestro -> import"
+          ?callback "VLUTFromADE(VLUTForm)")
+        hiCreateButton(?name 'browsebtn ?buttonText "...or Browse netlist dir"
           ?callback "VLUTBrowseDir(VLUTForm)")
-        hiCreateButton(?name 'scanbtn ?buttonText "Scan devices/nets"
+        hiCreateButton(?name 'scanbtn ?buttonText "Re-scan devices/nets"
           ?callback "VLUTScanNetlist(VLUTForm)")
         hiCreateCyclicField(?name 'pdksel ?prompt "PDK" ?choices names
           ?value VLUTGet(saved 'pdksel car(names))
@@ -490,7 +519,10 @@ let((ciw idx i)
   when(idx errset(hiDeleteBannerMenu(ciw idx)))
   hiInsertBannerMenu(ciw
     hiCreatePulldownMenu(gensym('VLUTMenu) "VLUT"
-      list(hiCreateMenuItem(?name 'vlutOpen
+      list(hiCreateMenuItem(?name 'vlutFromAde
+             ?itemText "Netlist current ADE/Maestro into VLUT..."
+             ?callback "VLUTOpenFromADE()")
+           hiCreateMenuItem(?name 'vlutOpen
              ?itemText "gm/ID Sweep Sizing..."
              ?callback "VLUT()")
            hiCreateMenuItem(?name 'vlutMgrItem

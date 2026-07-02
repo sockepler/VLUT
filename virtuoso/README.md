@@ -17,9 +17,20 @@ the result with real ADE/OCEAN calculator formulas.
    non-standard location, also `setenv VLUT_ROOT=/path/to/VLUT` so the
    plugin can find `vlut-cli`.
 
-A **VLUT** menu appears in the CIW with two items:
+A **VLUT** menu appears in the CIW with three items:
+- **Netlist current ADE/Maestro into VLUT…** — one click: netlist the
+  focused ADE Explorer/Assembler session and load it into the sweep form
+  (`VLUTOpenFromADE()`)
 - **gm/ID Sweep Sizing…** — the sweep-sizing form (`VLUT()`)
 - **PDK / LUT Manager…** — switch PDK and characterize LUTs (`VLUTMgr()`)
+
+## One-click from Maestro / ADE
+
+With an ADE Explorer or Assembler session open, use the CIW menu item
+above, or the **Netlist open ADE/Maestro → import** button on the form.
+It runs `asiGetCurrentSession` → `asiNetlist` → `asiGetNetlistDir`, drops
+the generated netlist directory into the form and scans it — no browsing.
+(You can still **…or Browse netlist dir** to point at any saved netlist.)
 
 ## PDK / LUT Manager
 

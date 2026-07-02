@@ -213,6 +213,8 @@ load("/path/to/VLUT/virtuoso/vlut_ade.il")
 `setenv VLUT_ROOT=/path/to/VLUT` も設定)。CIW に **VLUT** メニューが追加され、
 2 項目があります:
 
+- **Netlist current ADE/Maestro into VLUT…** — 開いている ADE/Maestro
+  セッションをネットリスト化してフォームに一発取り込み
 - **gm/ID Sweep Sizing…** — スイープ・サイジングのフォーム
 - **PDK / LUT Manager…** — PDK 切り替えと LUT 特性抽出
 
@@ -221,9 +223,14 @@ load("/path/to/VLUT/virtuoso/vlut_ade.il")
 **数字とパラメータ以外は入力しません**。ディレクトリはファイル選択、
 コーナー・PDK・デバイス・ネット・指標はすべてドロップダウンかリストです。
 
-1. **Browse netlist dir…** で ADE の `input.scs` があるフォルダを選択 →
-   **Scan devices/nets** でネットリストを解析(以下のデバイス欄・ネット欄が
-   自動で埋まります)。
+1. ネットリストの取り込み(いずれか):
+   - **Maestro/ADE から一発**: ADE Explorer/Assembler を開いた状態で、
+     CIW メニュー **Netlist current ADE/Maestro into VLUT…**、または
+     フォームの **Netlist open ADE/Maestro → import** ボタン。開いている
+     セッションを自動でネットリスト化(`asiNetlist`)し、その netlist
+     ディレクトリを読み込んでスキャンします(参照不要)。
+   - **手動**: **…or Browse netlist dir** で `input.scs` のあるフォルダを
+     選び、**Re-scan devices/nets** で解析。
 2. **PDK / Corner** をドロップダウンで選択(コーナーは PDK に追従)。
 3. **Sweep devices**(リストで複数選択)+ **Sweep gm/ID values**(数字)+
    **Sweep L**(数字)。

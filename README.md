@@ -33,10 +33,12 @@ corner are selected in the toolbar and persisted.
 
 ## ADE plugin (in-Virtuoso sweep sizing)
 
-`virtuoso/vlut_ade.il` embeds VLUT in the Virtuoso CIW. Set design
-variables + fixed/swept gm/ID targets in a form, and for each swept value
-it resizes the netlist (op → LUT → op) and runs the netlist's own ADE
-analyses. Any ADE/OCEAN calculator formula (`gainBwProd`, `phaseMargin`,
+`virtuoso/vlut_ade.il` embeds VLUT in the Virtuoso CIW. With an ADE
+Explorer/Assembler (Maestro) session open, one menu click netlists the
+current session and imports it (`asiNetlist` + `asiGetNetlistDir`) — no
+manual browsing. Then set design variables + fixed/swept gm/ID targets in
+the form, and for each swept value it resizes the netlist (op → LUT → op)
+and runs the netlist's own ADE analyses. Any ADE/OCEAN calculator formula (`gainBwProd`, `phaseMargin`,
 `ymax(db20(...))`, …) is the metric; results come back as a table with the
 best point marked, a metric-vs-gm/ID ViVA plot, a best-point waveform plot,
 and one-click push of the best `w/l/m` to the schematics. The headless
