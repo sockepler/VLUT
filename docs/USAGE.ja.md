@@ -35,10 +35,30 @@ PATH にも追記)。
 - 言語(English / 日本語)と PDK はツールバーで切り替え、選択は次回起動時も保持されます。
 - コーナー(tt/ff/ss/…)もツールバーで選択します。全タブに反映されます。
 
-## 3. PDK の設定(差し替え)
+## 3. PDK の設定・追加
 
-PDK は `pdks/<名前>.yaml` に記述します。ファイルを追加するだけで
-ツールバーの PDK メニューに現れます。
+### 3.1 GUI で新しい PDK を追加(推奨)
+
+ツールバーの **＋ PDK追加** ボタンでダイアログが開きます。yaml を手書き
+する必要はありません。
+
+1. **参照** で Spectre のモデルライブラリ(section 付き `.lib` 等)を選択。
+2. ライブラリを自動スキャンして、**コーナー section** と **BSIM MOS モデル
+   名(極性つき)** を一覧表示します。
+3. 登録するコーナー(既定 tt/ff/ss)とモデルにチェック。各モデルの Vmax は
+   モデル名から自動推定(名前に "33" があれば 3.3V)、必要なら編集。
+4. 抽出グリッド(L リスト・VSB・ステップ)を設定(既定値あり)。
+5. **Save** で `pdks/<名前>.yaml` を書き出し、その PDK に自動で切り替わります。
+   Vmax ごとにグリッドを分け、3.3V 系は lmin 未満の L を自動的に除外します。
+   BJT/抵抗/MIM の section は存在すれば自動で追記されます(デバイス名は後で
+   yaml に追記)。
+
+追加後は特性抽出タブでその PDK の LUT を作成できます。
+ダイアログは縦に長い場合スクロールできます(Save/Cancel は常に下部に固定)。
+
+### 3.2 yaml を直接書く
+
+`pdks/<名前>.yaml` を置くだけでも PDK メニューに現れます。書式:
 
 ```yaml
 name: my_pdk180
@@ -178,7 +198,58 @@ LUT 予測と実測は通常 2dB / 数 % 以内で一致します。
 - **MIM 容量**: サイズ指定で実測、または目標 C から正方形サイズを逆算
 - **BJT**: VBE 掃引で |IC| と β のカーブを表示(バンドギャップ設計用)
 
-## 5. トラブルシューティング
+## 5. Virtuoso ADE プラグイン(GUIを使わず ADE 内で実行)
+
+`virtuoso/vlut_ade.il` を Virtuoso の CIW から読み込むと、ADE の中から
+gm/ID スイープ・サイジングを実行し、ADE/OCEAN の計算式で最適点を選べます。
+
+### 5.1 読み込み
+
+```
+load("/path/to/VLUT/virtuoso/vlut_ade.il")
+```
+
+(`.cdsinit` に書けば自動読み込み。標準以外の場所からなら
+`setenv VLUT_ROOT=/path/to/VLUT` も設定)。CIW に **VLUT** メニューが追加され、
+2 項目があります:
+
+- **gm/ID Sweep Sizing…** — スイープ・サイジングのフォーム
+- **PDK / LUT Manager…** — PDK 切り替えと LUT 特性抽出
+
+### 5.2 gm/ID Sweep Sizing フォーム
+
+**数字とパラメータ以外は入力しません**。ディレクトリはファイル選択、
+コーナー・PDK・デバイス・ネット・指標はすべてドロップダウンかリストです。
+
+1. **Browse netlist dir…** で ADE の `input.scs` があるフォルダを選択 →
+   **Scan devices/nets** でネットリストを解析(以下のデバイス欄・ネット欄が
+   自動で埋まります)。
+2. **PDK / Corner** をドロップダウンで選択(コーナーは PDK に追従)。
+3. **Sweep devices**(リストで複数選択)+ **Sweep gm/ID values**(数字)+
+   **Sweep L**(数字)。
+4. **Fixed devices**(リスト選択)+ **Fixed gm/ID / L**(数字)+
+   **Add fixed group** で固定グループを追加(複数可、**Clear** で消去)。
+5. **Analysis**(ac/tran/dc)、**Metric**(DC利得・位相余裕・GBW・
+   ユニティゲイン周波数・帯域幅 など)+ **on net**(ネット名)を選ぶと、
+   `phaseMargin(v("out"))` のような ADE 式が自動生成されます。**Goal** で
+   最大化/最小化を選択。
+6. **Run sweep** — 各スイープ点でネットリストをサイジング(OP→LUT→OP)し、
+   ADE 解析を実行。完了後、指標が各点で評価され、**Results** 表に最適点が
+   マークされます。
+7. **Plot metric vs gm/ID**(ViVA で指標曲線)、**Plot best waveform**
+   (最適点の波形)、**Apply best to schematic**(最適サイズ w/l/m を回路図へ)。
+
+一般的でない式を使いたい場合は `vlut_ade.il` 冒頭の `VLUTMetricTypes` /
+`VLUTWaveTypes` に一行(`("ラベル" "式-ネット用%s")`)追記します。
+
+### 5.3 PDK / LUT Manager フォーム
+
+- **PDK** を選ぶと、各デバイスがどのコーナーの LUT を持っているか表示。
+- **Characterize LUTs** — デバイス/コーナー/温度/並列数を指定して
+  バックグラウンドで特性抽出(進捗は CIW に表示)。
+- 新しい yaml を `pdks/` に追加したら **Refresh status** で反映。
+
+## 6. トラブルシューティング
 
 | 症状 | 原因と対策 |
 |------|-----------|
@@ -189,20 +260,25 @@ LUT 予測と実測は通常 2dB / 数 % 以内で一致します。
 | 反復が収束しない | 目標 gm/ID がバイアス的に実現不可能(電流源が飽和しない等)。ログの ΔW と OP を確認し、目標を緩める |
 | GUI が起動しない | X11/DISPLAY を確認。SSH なら `ssh -X` |
 | Virtuosoへ反映が失敗 | virtuoso-bridge が起動しているか、Virtuoso 側で CIW `load(...)` 済みかを確認 |
+| プラグインのフォームで Browse が反応しない | `zenity` が未インストール。パスを手入力するか zenity を導入 |
 
-## 6. ディレクトリ構成
+## 7. ディレクトリ構成
 
 ```
-pdks/*.yaml        PDK 定義(ここを書けば PDK 追加)
+pdks/*.yaml        PDK 定義(GUI の ＋PDK追加 か手書きで作成)
+pdks/example.yaml.template  PDK 記述テンプレート
 gmid/              Python パッケージ(解析エンジン + GUI)
   char_mos.py      LUT 特性抽出(並列 Spectre)
   lut.py           LUT 補間・逆引き・サイジング
+  pdk.py / pdkscan.py  PDK 定義の読み込み / モデルライブラリ走査
   netlist.py       ADE ネットリスト解析/編集/OP デッキ生成
-  designer.py      gm/ID 反復サイジング
+  designer.py      gm/ID 反復サイジング(W + multiplier)
   topologies.py    内蔵トポロジー設計
   verify.py        検証テストベンチ生成
   passives.py      R/MIM/BJT 計算
-  qtgui/           PyQt5 GUI(タブごとに 1 モジュール)
+  cli.py           vlut-cli(プラグイン用ヘッドレスエンジン)
+  qtgui/           PyQt5 GUI(タブごとに 1 モジュール + PDK追加ダイアログ)
+virtuoso/vlut_ade.il  Virtuoso ADE プラグイン(SKILL)
 luts/              生成された LUT(.npz、git 管理外)
 work/              Spectre 作業ディレクトリ(git 管理外)
 ```

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QPushButton, QLabel, QFileDialog,
                              QTableWidget, QTableWidgetItem, QComboBox,
                              QCheckBox, QGroupBox, QGridLayout, QMessageBox,
-                             QDialogButtonBox)
+                             QDialogButtonBox, QScrollArea, QWidget)
 
 from .. import config
 from ..pdkscan import scan_model_lib, mos_corner_sections, class_sections
@@ -18,9 +18,17 @@ class AddPdkDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("add_pdk"))
-        self.resize(720, 640)
+        self.resize(620, 520)
         self.scan = None
-        lay = QVBoxLayout(self)
+
+        # scrollable content; Save/Cancel stay pinned at the bottom
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(4, 4, 8, 4)
 
         form = QFormLayout()
         self.name = QLineEdit()
@@ -52,7 +60,8 @@ class AddPdkDialog(QDialog):
         self.table.setHorizontalHeaderLabels(
             ["✓", tr("col_model"), tr("polarity"), "Vmax [V]"])
         self.table.horizontalHeader().setStretchLastSection(True)
-        lay.addWidget(self.table, 1)
+        self.table.setMinimumHeight(150)
+        lay.addWidget(self.table)
 
         # grid
         gbox = QGroupBox(tr("sweep_grid"))
@@ -71,11 +80,15 @@ class AddPdkDialog(QDialog):
         self.note.setWordWrap(True)
         self.note.setStyleSheet("color:#7a8aa5")
         lay.addWidget(self.note)
+        lay.addStretch(1)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
 
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         bb.accepted.connect(self._save)
         bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
+        outer.addWidget(bb)
 
     def _browse_lib(self):
         fn, _ = QFileDialog.getOpenFileName(
