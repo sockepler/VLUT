@@ -47,6 +47,12 @@ class AddPdkDialog(QDialog):
         form.addRow(tr("model_lib"), librow)
         lay.addLayout(form)
 
+        # detection status / guidance
+        self.status = QLabel(tr("pdk_pick_lib_hint"))
+        self.status.setWordWrap(True)
+        self.status.setStyleSheet("color:#40506b")
+        lay.addWidget(self.status)
+
         # corners
         self.cornerbox = QGroupBox(tr("mos_corners_pick"))
         self.cornergrid = QGridLayout(self.cornerbox)
@@ -134,6 +140,20 @@ class AddPdkDialog(QDialog):
         if not self.name.text():
             base = os.path.basename(self.lib.text()).split(".")[0]
             self.name.setText(base)
+        # tell the user what was detected and whether the file is usable
+        ncorner, nmos = len(mcorners), len(models)
+        if nmos == 0 and ncorner == 0:
+            self.status.setText(tr("pdk_detect_none"))
+            self.status.setStyleSheet("color:#b00020")
+        elif nmos == 0:
+            self.status.setText(tr("pdk_detect_no_model"))
+            self.status.setStyleSheet("color:#b00020")
+        elif ncorner == 0:
+            self.status.setText(tr("pdk_detect_no_corner"))
+            self.status.setStyleSheet("color:#b00020")
+        else:
+            self.status.setText(tr("pdk_detect_ok") % (ncorner, nmos))
+            self.status.setStyleSheet("color:#1a7a3a")
 
     def _save(self):
         name = self.name.text().strip().replace(" ", "_")

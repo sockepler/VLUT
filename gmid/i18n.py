@@ -23,10 +23,39 @@ _T = {
                  "追加されます。デバイス名は後でyamlに追記してください。"),
     "pdk_need_name_lib": ("Set a name and pick a model library.",
                           "名前とモデルライブラリを指定してください。"),
-    "pdk_need_corner": ("Select at least one corner.",
-                        "コーナーを1つ以上選択してください。"),
-    "pdk_need_model": ("Select at least one model.",
-                       "モデルを1つ以上選択してください。"),
+    "pdk_need_corner": ("No corner selected. Pick the corner .lib (the file"
+                        " your ADE Model Libraries points to), not a bare .mdl.",
+                        "コーナーが未選択です。ADEのModel Librariesが指すコーナー"
+                        " .lib を選んでください（素の .mdl ではありません）。"),
+    "pdk_need_model": ("No MOS model selected. Pick the corner .lib that your"
+                       " ADE points to — a bare .mdl/.ckt won't list them.",
+                       "MOSモデルが未選択です。ADEが指すコーナー .lib を選んで"
+                       "ください。素の .mdl/.ckt では検出されません。"),
+    "pdk_pick_lib_hint": ("Pick the corner model library — the .lib your ADE"
+                          " Model Libraries setup points to (it has the"
+                          " section tt/ff/ss blocks). Corners and MOS models"
+                          " are detected and pre-checked automatically.",
+                          "ADEのModel Librariesが指すコーナー用 .lib を選んで"
+                          "ください（section tt/ff/ss を含むファイル）。コーナー"
+                          "とMOSモデルは自動検出・自動チェックされます。"),
+    "pdk_detect_ok": ("Detected %d corners and %d MOS models — pre-checked."
+                      " Review, then Save.",
+                      "コーナー %d 個、MOSモデル %d 個を検出・チェック済み。"
+                      "確認して Save。"),
+    "pdk_detect_no_model": ("No MOS transistor models found in this file."
+                            " Pick the corner .lib your ADE points to"
+                            " (a .mdl/.ckt alone won't work).",
+                            "このファイルにMOSモデルがありません。ADEが指す"
+                            "コーナー .lib を選んでください（.mdl/.ckt 単体は不可）。"),
+    "pdk_detect_no_corner": ("Models found but no corner sections. Pick the"
+                             " corner .lib (with section tt/ff/ss), not a bare"
+                             " .mdl.",
+                             "モデルはありますがコーナーがありません。section"
+                             " tt/ff/ss を持つコーナー .lib を選んでください。"),
+    "pdk_detect_none": ("No corners or models detected — this is not a model"
+                        " library. Pick the corner .lib your ADE points to.",
+                        "コーナーもモデルも検出できません。モデルライブラリでは"
+                        "ありません。ADEが指すコーナー .lib を選んでください。"),
     "corner": ("Corner", "コーナー"),
     "language": ("Language", "言語"),
     "temp": ("Temp [°C]", "温度 [°C]"),
