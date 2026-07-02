@@ -4,7 +4,7 @@
 Cadence Spectre, inspired by [ADT](https://adt.master-micro.com/).
 Desktop GUI (PyQt5), English / 日本語 UI.
 
-**日本語の使用マニュアル: [docs/USAGE.ja.md](docs/USAGE.ja.md)**
+**使用手册 / 使用マニュアル: [中文](docs/USAGE.zh.md) · [日本語](docs/USAGE.ja.md)**
 
 ## Setup & launch
 
