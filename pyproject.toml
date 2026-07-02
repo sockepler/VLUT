@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 vlut = "gmid.qtgui.main:main"
+vlut-cli = "gmid.cli:main"
 
 [tool.setuptools]
 packages = ["gmid", "gmid.qtgui"]

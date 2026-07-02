@@ -241,13 +241,15 @@ class DesignDir:
         r"^\s*(simulator\b|global\b|include\b|ahdl_include\b|parameters\b)")
     _INCLUDE = re.compile(r'^\s*include\s+"([^"]+)"\s*(?:section=(\S+))?')
 
-    def __init__(self, src, workname="design", pdk=None, corner=None):
+    def __init__(self, src, workname="design", pdk=None, corner=None,
+                 param_overrides=None):
         """src: path to ADE netlist directory or its input.scs."""
         if os.path.isfile(src):
             src = os.path.dirname(src)
         self.src = src
         self.pdk = pdk
         self.corner = corner
+        self.param_overrides = dict(param_overrides or {})
         self.remap_log = []
         self.dir = os.path.join(config.WORK_DIR, workname)
         if os.path.exists(self.dir):
@@ -325,16 +327,28 @@ class DesignDir:
 
     def _default_bare_params(self, line):
         """ADE design variables can appear without a value in the point
-        netlist (`parameters Vos CL=50f`); give them 0 so the op runs."""
+        netlist (`parameters Vos CL=50f`); give them 0 so the op runs.
+        Also applies self.param_overrides to existing definitions."""
         if not re.match(r"\s*parameters\b", line):
             return line
         toks = line.split()
         out = [toks[0]]
-        for i, t in enumerate(toks[1:]):
-            if "=" not in t:
-                self.remap_log.append("bare parameter %s -> 0" % t)
-                t = t + "=0"
+        seen = set()
+        for t in toks[1:]:
+            if "=" in t:
+                name = t.split("=", 1)[0]
+                seen.add(name)
+                if name in self.param_overrides:
+                    t = "%s=%s" % (name, self.param_overrides[name])
+            else:
+                seen.add(t)
+                if t in self.param_overrides:
+                    t = "%s=%s" % (t, self.param_overrides[t])
+                else:
+                    self.remap_log.append("bare parameter %s -> 0" % t)
+                    t = t + "=0"
             out.append(t)
+        self._params_seen.update(seen)
         return " ".join(out)
 
     # statements that must not run in the op-only deck
@@ -359,17 +373,20 @@ class DesignDir:
             i = j + 1
         return out
 
-    def op_deck(self, save_paths):
-        """Build op-only deck: control/design from input.scs, with model
-        includes repaired, analyses stripped and a single dc op added."""
+    def _build_deck(self, keep_analyses):
+        """Common deck builder: control(+design) from input.scs with model
+        includes repaired, parameters overridden, includes deduped."""
+        self._params_seen = set()
         lines = []
         if os.path.exists(self.input_scs):
             for ln in self._logical_lines(self.input_scs):
                 if self.inline_design:
-                    # keep everything except analyses/saves
-                    if not self._STRIP.match(ln):
+                    if keep_analyses or not self._STRIP.match(ln):
                         lines.append(ln.rstrip())
                 elif self._CONTROL_KEEP.match(ln):
+                    lines.append(ln.rstrip())
+                elif keep_analyses and not re.match(
+                        r"\s*(//|$)", ln):
                     lines.append(ln.rstrip())
         else:
             lines = ['simulator lang=spectre', 'global 0',
@@ -392,7 +409,17 @@ class DesignDir:
                 seen.add(key)
             out.append(ln)
         lines = out
-        deck = "\n".join(lines) + "\n"
+        # overrides for parameters never defined in the deck
+        extra = {k: v for k, v in self.param_overrides.items()
+                 if k not in self._params_seen}
+        if extra:
+            lines.append("parameters " + " ".join(
+                "%s=%s" % kv for kv in extra.items()))
+        return "\n".join(lines) + "\n"
+
+    def op_deck(self, save_paths):
+        """Op-only deck: analyses stripped, a single dc op added."""
+        deck = self._build_deck(keep_analyses=False)
         for p in save_paths:
             deck += ("save " + " ".join(
                 "%s:%s" % (p, q) for q in
@@ -400,6 +427,26 @@ class DesignDir:
                  "vth", "vdsat", "cgg", "cdd"]) + "\n")
         deck += "gmidop dc\n"
         return deck
+
+    def run_full(self, tag="full"):
+        """Run the netlist's own analyses on the current (resized) design;
+        returns the psf raw directory."""
+        self.netlist.save()
+        deck = self._build_deck(keep_analyses=True)
+        deckfile = os.path.join(self.dir, "vlut_%s.scs" % tag)
+        with open(deckfile, "w") as f:
+            f.write(deck)
+        raw = os.path.join(self.dir, "psf_%s" % tag)
+        log = os.path.join(self.dir, "vlut_%s.log" % tag)
+        with open(log, "w") as lf:
+            r = subprocess.run(
+                [config.SPECTRE, os.path.basename(deckfile), "-format",
+                 "psfbin", "-raw", raw],
+                stdout=lf, stderr=subprocess.STDOUT, cwd=self.dir)
+        if r.returncode != 0:
+            raise RuntimeError("Spectre run failed:\n" +
+                               open(log).read()[-2500:])
+        return raw
 
     def run_op(self, save_paths):
         """Run a dc op; return {path: {param: float}}."""

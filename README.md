@@ -31,6 +31,18 @@ corner are selected in the toolbar and persisted.
 | Passives / BJT | Resistor measure/solve-L, MIM measure/solve-size, BJT VBE sweeps (IC/β) |
 | Characterize | Generate MOS LUTs per device/corner/temp with parallel Spectre jobs |
 
+## ADE plugin (in-Virtuoso sweep sizing)
+
+`virtuoso/vlut_ade.il` embeds VLUT in the Virtuoso CIW. Set design
+variables + fixed/swept gm/ID targets in a form, and for each swept value
+it resizes the netlist (op → LUT → op) and runs the netlist's own ADE
+analyses. Any ADE/OCEAN calculator formula (`gainBwProd`, `phaseMargin`,
+`ymax(db20(...))`, …) is the metric; results come back as a table with the
+best point marked, a metric-vs-gm/ID ViVA plot, a best-point waveform plot,
+and one-click push of the best `w/l/m` to the schematics. The headless
+engine is `vlut-cli` (`scan` / `run job.json` / `apply`). See
+[virtuoso/README.md](virtuoso/README.md).
+
 ## PDK support
 
 PDKs are described by `pdks/<name>.yaml` — model lib path, corner
