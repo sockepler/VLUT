@@ -10,9 +10,13 @@ Desktop GUI (PyQt5), English / 日本語 UI.
 
 ```bash
 ./install.sh                                     # venv + deps + `vlut` on PATH
+                                                 #   + Virtuoso ADE plugin auto-load
 cp pdks/example.yaml.template pdks/my_pdk.yaml   # describe your PDK
 vlut                                             # or ./start.sh
 ```
+
+`./install.sh` also registers the Virtuoso ADE plugin to auto-load on
+startup (skip with `--no-plugin`; manage via `virtuoso/install_plugin.sh`).
 
 `install.sh` picks a Python ≥ 3.9, creates `venv/`, pip-installs the
 package, and drops a `vlut` launcher into `~/.local/bin` (added to PATH

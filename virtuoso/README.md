@@ -13,9 +13,17 @@ the result with real ADE/OCEAN calculator formulas.
    load("/path/to/VLUT/virtuoso/vlut_ade.il")
    ```
 
-   To auto-load, add that line to your `.cdsinit`. If you load it from a
-   non-standard location, also `setenv VLUT_ROOT=/path/to/VLUT` so the
-   plugin can find `vlut-cli`.
+   To **auto-load on every Virtuoso start**, run once:
+
+   ```
+   virtuoso/install_plugin.sh          # adds a guarded load to ~/.cdsinit
+   virtuoso/install_plugin.sh --uninstall
+   ```
+
+   (`install.sh` already does this unless you pass `--no-plugin`.) The
+   entry sets `VLUT_ROOT` and only loads if the file exists, so it never
+   breaks Virtuoso startup. Restart Virtuoso, or `load(...)` once by hand
+   for the current session.
 
 A **VLUT** menu appears in the CIW with three items:
 - **Netlist current ADE/Maestro into VLUT…** — one click: netlist the

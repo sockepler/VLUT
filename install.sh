@@ -57,5 +57,13 @@ case ":$PATH:" in
         ;;
 esac
 
+# ---- Virtuoso ADE plugin auto-load (unless --no-plugin) ----
+if [ "$1" != "--no-plugin" ]; then
+    "$ROOT/virtuoso/install_plugin.sh" || \
+        echo "   (skip plugin auto-load; run virtuoso/install_plugin.sh later)"
+fi
+
 echo
-echo "Done. Launch with:  vlut   (or ./start.sh)"
+echo "Done."
+echo "  Desktop GUI : vlut   (or ./start.sh)"
+echo "  Virtuoso    : ADE plugin auto-loads on next Virtuoso start (CIW menu: VLUT)"
