@@ -521,26 +521,47 @@ procedure(VLUTMgr()
     hiDisplayForm(VLUTMgrForm)
     t))
 
-;; CIW menu (rebuilt on every load so reloads pick up new items)
-let((ciw idx i)
-  ciw = hiGetCIWindow()
-  i = 0
-  foreach(m hiGetBannerMenus(ciw)
-    when(!idx && pcreMatchp("^VLUTMenu" sprintf(nil "%L" m)) idx = i)
-    i = i + 1)
-  when(idx errset(hiDeleteBannerMenu(ciw idx)))
-  hiInsertBannerMenu(ciw
-    hiCreatePulldownMenu(gensym('VLUTMenu) "VLUT"
-      list(hiCreateMenuItem(?name 'vlutFromAde
-             ?itemText "Netlist current ADE/Maestro into VLUT..."
-             ?callback "VLUTOpenFromADE()")
-           hiCreateMenuItem(?name 'vlutOpen
-             ?itemText "gm/ID Sweep Sizing..."
-             ?callback "VLUT()")
-           hiCreateMenuItem(?name 'vlutMgrItem
-             ?itemText "PDK / LUT Manager..."
-             ?callback "VLUTMgr()")))
-    length(hiGetBannerMenus(ciw))))
+;; ---------------------------------------------------------------- menus
+;; build the VLUT pulldown (same items everywhere)
+procedure(VLUTMenuItems()
+  list(hiCreateMenuItem(?name 'vlutFromAde
+         ?itemText "Netlist current ADE/Maestro into VLUT..."
+         ?callback "VLUTOpenFromADE()")
+       hiCreateMenuItem(?name 'vlutOpen
+         ?itemText "gm/ID Sweep Sizing..."
+         ?callback "VLUT()")
+       hiCreateMenuItem(?name 'vlutMgrItem
+         ?itemText "PDK / LUT Manager..."
+         ?callback "VLUTMgr()")))
 
-printf("VLUT ADE plugin loaded (root: %s). CIW menu: VLUT, or type VLUT()\n"
-       VLUTRoot)
+;; add/refresh the VLUT banner menu on any window (idempotent by name)
+procedure(VLUTAddMenuTo(win)
+  let((idx i)
+    i = 0
+    foreach(m hiGetBannerMenus(win)
+      when(!idx && pcreMatchp("^VLUTMenu" sprintf(nil "%L" m)) idx = i)
+      i = i + 1)
+    when(idx errset(hiDeleteBannerMenu(win idx)))
+    errset(hiInsertBannerMenu(win
+      hiCreatePulldownMenu(gensym('VLUTMenu) "VLUT" VLUTMenuItems())
+      length(hiGetBannerMenus(win))))))
+
+;; put the menu on every open ADE Explorer / Assembler (Maestro) window
+procedure(VLUTAddMenuToAllAde()
+  foreach(w hiGetWindowList()
+    when(member(car(errset(hiGetAppType(w)))
+               list("explorer" "assembler" "adexl"))
+      VLUTAddMenuTo(w))))
+
+;; fires when a maestro/adexl window opens -> menu appears inside it
+procedure(VLUTAdeTrigger(@rest _args) VLUTAddMenuToAllAde())
+
+foreach(vt list("maestro" "adexl")
+  errset(deRegUserTriggers(vt 'VLUTAdeTrigger)))
+
+;; CIW menu + any already-open Maestro windows (so no reopen needed now)
+VLUTAddMenuTo(hiGetCIWindow())
+VLUTAddMenuToAllAde()
+
+printf("VLUT loaded. Menu 'VLUT' is in the CIW and in ADE Explorer/Assembler%s"
+       " windows (root: %s)\n" "" VLUTRoot)

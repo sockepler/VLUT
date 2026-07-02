@@ -25,7 +25,9 @@ the result with real ADE/OCEAN calculator formulas.
    breaks Virtuoso startup. Restart Virtuoso, or `load(...)` once by hand
    for the current session.
 
-A **VLUT** menu appears in the CIW with three items:
+A **VLUT** menu appears both in the CIW **and in every ADE Explorer /
+Assembler (Maestro) window** (registered via a `maestro`/`adexl` window
+trigger, so it shows up automatically when you open Maestro). Items:
 - **Netlist current ADE/Maestro into VLUT…** — one click: netlist the
   focused ADE Explorer/Assembler session and load it into the sweep form
   (`VLUTOpenFromADE()`)

@@ -217,8 +217,10 @@ virtuoso/install_plugin.sh --uninstall
 ```
 
 (`install.sh` が `--no-plugin` 以外なら自動で実行します)。ファイルが存在する
-場合のみ load するため Virtuoso 起動を壊しません。CIW に **VLUT** メニューが
-追加され、3 項目があります:
+場合のみ load するため Virtuoso 起動を壊しません。**VLUT** メニューは CIW と
+**各 ADE Explorer / Assembler（Maestro）ウィンドウの中**の両方に出ます
+（`maestro`/`adexl` のウィンドウトリガーで自動登録されるので、Maestro を開けば
+その中にメニューが現れます）。3 項目:
 
 - **Netlist current ADE/Maestro into VLUT…** — 開いている ADE/Maestro
   セッションをネットリスト化してフォームに一発取り込み
