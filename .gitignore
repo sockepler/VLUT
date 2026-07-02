@@ -1,0 +1,16 @@
+venv/
+work/
+luts/
+__pycache__/
+*.pyc
+*.log
+.claude/
+
+# site-specific PDK descriptors are never committed — write your own
+# from pdks/example.yaml.template
+pdks/*.yaml
+
+# legacy web UI (superseded by the desktop GUI)
+gmid/app.py
+web/
+start_web.sh

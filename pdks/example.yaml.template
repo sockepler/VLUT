@@ -1,0 +1,52 @@
+# PDK descriptor template.
+# Copy to pdks/<your_pdk>.yaml and fill in for your process; the file is
+# picked up automatically and appears in the toolbar PDK menu.
+# (pdks/*.yaml is gitignored — site-specific PDK data stays local.)
+
+name: my_pdk_180            # LUT filename prefix, keep short
+title: "My 0.18um PDK"      # shown in the GUI
+model_lib: /path/to/pdk/models/spectre/corner.lib   # section-based corner lib
+mos_corners: [tt, ff, ss]   # sections in model_lib for MOS
+default_corner: tt
+default_temp: 27.0
+
+# sweep-grid presets referenced by the MOS devices below
+grids:
+  core:
+    vmax: 1.8               # VGS/VDS sweep up to this voltage
+    Ls: [0.18, 0.22, 0.28, 0.35, 0.45, 0.6, 0.8, 1.0, 1.5, 2.0, 3.0, 5.0]  # um
+    vsbs: [0.0, 0.3, 0.6, 0.9]      # source-bulk sweep points [V]
+    vgs_step: 0.02
+    vds_step: 0.05
+  io:
+    vmax: 3.3
+    Ls: [0.35, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0]   # respect the model lmin!
+    vsbs: [0.0, 0.5, 1.0, 1.5]
+    vgs_step: 0.025
+    vds_step: 0.075
+
+# MOS devices: model names as they appear in netlists.  <name>_ckt
+# inline-subckt mismatch wrappers are recognized automatically.
+mos:
+  nch:    {polarity: n, grid: core, wchar: 10e-6, desc: "core NMOS"}
+  pch:    {polarity: p, grid: core, wchar: 10e-6, desc: "core PMOS"}
+  nch_io: {polarity: n, grid: io,   wchar: 10e-6, desc: "IO NMOS"}
+  pch_io: {polarity: p, grid: io,   wchar: 10e-6, desc: "IO PMOS"}
+
+# BJTs: fixed-geometry model names, grouped by family
+bjt:
+  section: {tt: bjt_tt, ff: bjt_ff, ss: bjt_ss}
+  models:
+    pnp: [pnp_2x2, pnp_5x5, pnp_10x10]
+
+# resistors: subckt name + terminal count (2 or 3), params w/l in meters
+res:
+  section: {tt: res_tt, ff: res_ff, ss: res_ss}
+  devices:
+    rpoly: {subckt: rpoly_ckt, terms: 2, desc: "poly resistor"}
+
+# capacitors: subckt name, params wr/lr in meters
+cap:
+  section: {tt: mim_tt, ff: mim_ff, ss: mim_ss}
+  devices:
+    mim: {subckt: mim_ckt, desc: "MIM capacitor"}
