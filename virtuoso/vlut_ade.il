@@ -304,35 +304,71 @@ procedure(VLUTFromADE(form)
       if(dir && isDir(dir) then
         form->ndir->value = dir
         printf("VLUT: imported ADE netlist %s\n" dir)
-        VLUTScanNetlist(form)
+        VLUTScanNetlist(form)   ; robust scan + rebuild (or warn)
       else
         hiDisplayAppDBox(?name 'VLUTNoDir ?dboxBanner "VLUT"
           ?dboxText "Netlist directory not found; run the ADE netlister once."
           ?dialogType hicWarningDialog ?buttonList list("OK"))))))
 
-;; open the form and immediately pull the current ADE netlist
-procedure(VLUTOpenFromADE()
-  VLUT()
-  VLUTFromADE(VLUTForm))
-
-;; scan the netlist for device + net names, then rebuild with them filled
-procedure(VLUTScanNetlist(form)
-  let((dir out p line)
-    dir = form->ndir->value
-    if(dir == "" then printf("VLUT: pick a netlist dir first\n")
+;; run vlut-cli scan-il on a dir; update the device/net globals ONLY on
+;; success. Returns t if devices were found, nil otherwise (last good
+;; device list is preserved so a transient empty scan can't wipe it).
+procedure(VLUTDoScan(dir pdk)
+  let((out p line devs nets)
+    when(!pdk || pdk == "" pdk = car(VLUTPdkNames(VLUTPdkInventory())))
+    out = strcat(getShellEnvVar("HOME") "/.cache/vlut_scan.il")
+    sh(sprintf(nil "%s scan-il %s %s > %s 2>%s.err"
+               VLUTCli dir (pdk || "") out out))
+    p = errset(infile(out))
+    when(car(p)
+      line = car(errset(car(lineread(car(p)))))
+      close(car(p)))
+    devs = and(line nth(0 line))
+    nets = and(line nth(1 line))
+    if(devs then
+      VLUTScanDevs = devs
+      VLUTScanNets = nets
+      printf("VLUT: scanned %d devices, %d nets from %s\n"
+             length(devs) length(nets) dir)
+      t
     else
-      out = sprintf(nil "%s/.cache/vlut_scan.il" getShellEnvVar("HOME"))
-      sh(sprintf(nil "%s scan-il %s %s > %s 2>/dev/null"
-                 VLUTCli dir form->pdksel->value out))
-      p = errset(infile(out))
-      if(car(p) then
-        line = car(lineread(car(p))) close(car(p))
-        VLUTScanDevs = nth(0 line)
-        VLUTScanNets = nth(1 line)
-        printf("VLUT: scanned %d devices, %d nets\n"
-               length(VLUTScanDevs) length(VLUTScanNets))
+      printf("VLUT: no devices parsed from %s (see %s.err)\n" dir out)
+      nil)))
+
+;; on-form Scan button: scan the current dir, then rebuild with the results
+procedure(VLUTScanNetlist(form)
+  let((dir)
+    dir = form->ndir->value
+    if(dir == "" then
+      hiDisplayAppDBox(?name 'VLUTNoDir2 ?dboxBanner "VLUT"
+        ?dboxText "Import from ADE or Browse to a netlist dir first."
+        ?dialogType hicWarningDialog ?buttonList list("OK"))
+    else
+      if(VLUTDoScan(dir form->pdksel->value) then
         VLUTBuildForm(VLUTSaveVals(form))
-      else printf("VLUT: scan failed for %s\n" dir)))))
+      else
+        hiDisplayAppDBox(?name 'VLUTNoDev ?dboxBanner "VLUT"
+          ?dboxText sprintf(nil
+            "No MOS devices found in the netlist.\nCheck that PDK '%s' matches the netlist models."
+            form->pdksel->value)
+          ?dialogType hicWarningDialog ?buttonList list("OK"))))))
+
+;; menu entry: netlist the current ADE session, scan, THEN open the form
+;; once (already populated) -- no build-empty-then-rebuild flicker/race
+procedure(VLUTOpenFromADE()
+  let((s dir)
+    s = car(errset(asiGetCurrentSession()))
+    if(!s then
+      hiDisplayAppDBox(?name 'VLUTNoAde2 ?dboxBanner "VLUT"
+        ?dboxText "No open ADE Explorer / Assembler session found."
+        ?dialogType hicWarningDialog ?buttonList list("OK"))
+    else
+      printf("VLUT: netlisting current ADE session...\n")
+      errset(asiNetlist(s))
+      dir = car(errset(asiGetNetlistDir(s)))
+      when(dir && isDir(dir) VLUTDoScan(dir nil))
+      VLUT()
+      when(dir && isDir(dir) VLUTForm->ndir->value = dir))))
 
 procedure(VLUTAddFixed(form)
   ;; append the selected fixed-device group to the read-only summary
