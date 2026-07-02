@@ -245,6 +245,15 @@ procedure(VLUTPdkCorners(pdkname)
 procedure(VLUTGet(saved sym dflt)
   let((c) c = assoc(sym saved) if(c then cadr(c) else dflt)))
 
+;; keep a restored value valid against the current choices, so rebuilding
+;; a form after a re-scan / PDK change never fails with
+;; "value must be contained within the list of choices"
+procedure(VLUTOneOf(saved sym choices)
+  let((v) v = VLUTGet(saved sym nil)
+    if(v && member(v choices) then v else car(choices))))
+procedure(VLUTSubsetOf(saved sym choices)
+  setof(x VLUTGet(saved sym nil) member(x choices)))
+
 procedure(VLUTSaveVals(form)
   ;; snapshot current field values so a rebuild can restore them
   list(
@@ -343,8 +352,10 @@ procedure(VLUTBuildForm(saved)
   let((names corners devs nets mlabels wlabels)
     names = VLUTPdkNames(VLUTPdkInventory()) || list("default")
     corners = VLUTPdkCorners(VLUTGet(saved 'pdksel car(names)))
-    devs = VLUTScanDevs || list("(scan first)")
-    nets = VLUTScanNets || list("(scan first)")
+    ;; before a scan the lists are empty; a lone placeholder must never be
+    ;; carried into a rebuild as a selected value (VLUTSubsetOf/OneOf guard it)
+    devs = VLUTScanDevs || list("<scan a netlist first>")
+    nets = VLUTScanNets || list("<scan a netlist first>")
     mlabels = VLUTLabels(VLUTMetricTypes)
     wlabels = VLUTLabels(VLUTWaveTypes)
     when(boundp('VLUTForm) && hiIsForm(VLUTForm) hiDeleteForm(VLUTForm))
@@ -363,10 +374,10 @@ procedure(VLUTBuildForm(saved)
         hiCreateButton(?name 'scanbtn ?buttonText "Re-scan devices/nets"
           ?callback "VLUTScanNetlist(VLUTForm)")
         hiCreateCyclicField(?name 'pdksel ?prompt "PDK" ?choices names
-          ?value VLUTGet(saved 'pdksel car(names))
+          ?value VLUTOneOf(saved 'pdksel names)
           ?callback "VLUTBuildForm(VLUTSaveVals(VLUTForm))")
         hiCreateCyclicField(?name 'corner ?prompt "Corner" ?choices corners
-          ?value VLUTGet(saved 'corner car(corners)))
+          ?value VLUTOneOf(saved 'corner corners))
         hiCreateFloatField(?name 'wmax ?prompt "Max unit W [um]"
           ?value VLUTGet(saved 'wmax 10.0))
         hiCreateIntField(?name 'maxiter ?prompt "Max iterations"
@@ -377,7 +388,7 @@ procedure(VLUTBuildForm(saved)
         ;; ---- sweep group (device listbox + numeric values) ----
         hiCreateListBoxField(?name 'sweepdevs ?prompt "Sweep devices"
           ?choices devs ?multipleSelect t
-          ?value VLUTGet(saved 'sweepdevs nil))
+          ?value VLUTSubsetOf(saved 'sweepdevs devs))
         hiCreateStringField(?name 'sweepvals ?prompt "Sweep gm/ID values"
           ?value VLUTGet(saved 'sweepvals "8 12 16 20"))
         hiCreateFloatField(?name 'sweepl ?prompt "Sweep L [um] (0=keep)"
@@ -399,14 +410,14 @@ procedure(VLUTBuildForm(saved)
           ?choices list("ac" "tran" "dc")
           ?value VLUTGet(saved 'analysis "ac"))
         hiCreateCyclicField(?name 'metrictype ?prompt "Metric"
-          ?choices mlabels ?value VLUTGet(saved 'metrictype car(mlabels)))
+          ?choices mlabels ?value VLUTOneOf(saved 'metrictype mlabels))
         hiCreateCyclicField(?name 'metricnet ?prompt "on net"
-          ?choices nets ?value VLUTGet(saved 'metricnet car(nets)))
+          ?choices nets ?value VLUTOneOf(saved 'metricnet nets))
         hiCreateCyclicField(?name 'goal ?prompt "Goal"
           ?choices list("maximize" "minimize")
-          ?value VLUTGet(saved 'goal "maximize"))
+          ?value VLUTOneOf(saved 'goal list("maximize" "minimize")))
         hiCreateCyclicField(?name 'wavetype ?prompt "Waveform"
-          ?choices wlabels ?value VLUTGet(saved 'wavetype car(wlabels)))
+          ?choices wlabels ?value VLUTOneOf(saved 'wavetype wlabels))
         ;; ---- actions ----
         hiCreateButton(?name 'runbtn ?buttonText "Run sweep"
           ?callback "VLUTRun(VLUTForm)")
