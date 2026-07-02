@@ -22,11 +22,15 @@ Cadence Spectre でトランジスタ特性をルックアップテーブル(LUT
 ## 2. インストールと起動
 
 ```bash
-git clone <this repo> vlut && cd vlut
-python3.11 -m venv venv
-./venv/bin/pip install numpy scipy PyQt5 matplotlib pyyaml flask
-./start.sh          # デスクトップGUI
+git clone https://github.com/sockepler/VLUT.git && cd VLUT
+./install.sh        # venv 作成 + 依存インストール + `vlut` コマンド登録
+cp pdks/example.yaml.template pdks/my_pdk.yaml   # PDK を記述
+vlut                # デスクトップGUI 起動(./start.sh でも可)
 ```
+
+`install.sh` は Python 3.9 以上を自動選択して venv を作り、
+`~/.local/bin/vlut` ランチャーを配置します(必要なら ~/.bashrc の
+PATH にも追記)。
 
 - 言語(English / 日本語)と PDK はツールバーで切り替え、選択は次回起動時も保持されます。
 - コーナー(tt/ff/ss/…)もツールバーで選択します。全タブに反映されます。

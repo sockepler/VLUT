@@ -1,3 +1,16 @@
+Metadata-Version: 2.4
+Name: vlut
+Version: 0.1.0
+Summary: gm/id LUT-based analog design tool driven by local Cadence Spectre
+License: MIT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: matplotlib
+Requires-Dist: PyQt5
+Requires-Dist: PyYAML
+
 # VLUT — gm/id Design Tool (standalone GUI, EN/JA)
 
 **VLUT** is a gm/id lookup-table analog design tool driven by a local
@@ -9,16 +22,15 @@ Desktop GUI (PyQt5), English / 日本語 UI.
 ## Setup & launch
 
 ```bash
-./install.sh                                     # venv + deps + `vlut` on PATH
+python3.11 -m venv venv
+./venv/bin/pip install numpy scipy PyQt5 matplotlib pyyaml
 cp pdks/example.yaml.template pdks/my_pdk.yaml   # describe your PDK
-vlut                                             # or ./start.sh
+./start.sh
 ```
 
-`install.sh` picks a Python ≥ 3.9, creates `venv/`, pip-installs the
-package, and drops a `vlut` launcher into `~/.local/bin` (added to PATH
-via `~/.bashrc` if needed). Requires Linux + X11, `spectre` in PATH, and
-a Spectre corner-section model library from your PDK. Language, PDK and
-corner are selected in the toolbar and persisted.
+Requires Linux + X11, `spectre` in PATH, and a Spectre corner-section
+model library from your PDK. Language, PDK and corner are selected in
+the toolbar and persisted.
 
 ## Tabs
 
