@@ -17,8 +17,25 @@ the result with real ADE/OCEAN calculator formulas.
    non-standard location, also `setenv VLUT_ROOT=/path/to/VLUT` so the
    plugin can find `vlut-cli`.
 
-A **VLUT** menu appears in the CIW (`VLUT > gm/ID Sweep Sizing…`), or call
-`VLUT()`.
+A **VLUT** menu appears in the CIW with two items:
+- **gm/ID Sweep Sizing…** — the sweep-sizing form (`VLUT()`)
+- **PDK / LUT Manager…** — switch PDK and characterize LUTs (`VLUTMgr()`)
+
+## PDK / LUT Manager
+
+- **PDK** cyclic — lists every `pdks/*.yaml`; selecting one shows its
+  corners and, per device, which LUT corners are already built.
+- **Characterize LUTs** — runs `vlut-cli char` in the background
+  (`ipcBeginProcess`); progress prints to the CIW, the status view
+  refreshes when done. Set devices / corner / temp / parallel jobs first.
+- **Refresh status** — re-reads the inventory (use after adding a new
+  `pdks/<name>.yaml` from the template, or after an external characterize).
+- The main sizing form has a matching **PDK** selector; the chosen PDK is
+  written into the sweep job so sizing uses that PDK's LUTs.
+
+Adding a PDK needs no GUI: `cp pdks/example.yaml.template pdks/<name>.yaml`,
+edit it, then **Refresh status** (or reload the plugin) — it appears in
+both PDK selectors.
 
 ## Form fields
 

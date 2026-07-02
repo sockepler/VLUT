@@ -4,6 +4,8 @@ Subcommands:
   scan <netlist_dir>            list PDK devices found (JSON + SKILL list)
   run  <job.json>               gm/ID sweep: size -> full sim -> psf per point
   apply <results.json> <index>  emit SKILL that pushes that point's sizes
+  pdks                          SKILL-readable PDK/device/LUT inventory
+  char <pdk> <corner> <temp> <nproc> <dev...>   characterize LUTs
 
 job.json:
 {
@@ -155,6 +157,49 @@ def _repoint(nd, job, tag):
     return dst
 
 
+def pdks():
+    """One-line SKILL inventory:
+    ((name title (corners...) ((dev polarity (lut-corners...)) ...)) ...)"""
+    from .lut import available_luts
+    out = []
+    for name, p in pdkmod.registry().items():
+        luts = available_luts(p)
+        devs = " ".join(
+            '("%s" "%s" (%s))' % (d, p.mos[d]["polarity"],
+                                  " ".join('"%s"' % c for c in
+                                           sorted(luts.get(d, []))))
+            for d in p.mos)
+        out.append('("%s" "%s" (%s) (%s))'
+                   % (name, p.title,
+                      " ".join('"%s"' % c for c in p.mos_corners), devs))
+    print("(" + " ".join(out) + ")")
+    return 0
+
+
+def char(pdk_name, corner, temp, nproc, devices):
+    from .char_mos import CharJob
+    import time
+    pdk = pdkmod.get(pdk_name)
+    bad = [d for d in devices if d not in pdk.mos]
+    if bad:
+        print("unknown devices: %s" % " ".join(bad))
+        return 1
+    job = CharJob(devices, corner=corner, temp=float(temp),
+                  nproc=int(nproc), pdk=pdk)
+    job.start()
+    last = -1
+    while True:
+        p = job.progress()
+        if p["done"] != last:
+            last = p["done"]
+            print("progress %d/%d %s" % (p["done"], p["total"],
+                                         p["message"]), flush=True)
+        if p["state"] in ("finished", "error", "stopped"):
+            print("charend %s %s" % (p["state"], p["message"]), flush=True)
+            return 0 if p["state"] == "finished" else 1
+        time.sleep(1)
+
+
 def main():
     try:
         cmd = sys.argv[1]
@@ -166,6 +211,11 @@ def main():
         if cmd == "apply":
             sys.exit(apply_point(sys.argv[2], sys.argv[3],
                                  sys.argv[4] if len(sys.argv) > 4 else None))
+        if cmd == "pdks":
+            sys.exit(pdks())
+        if cmd == "char":
+            sys.exit(char(sys.argv[2], sys.argv[3], sys.argv[4],
+                          sys.argv[5], sys.argv[6:]))
         print(__doc__)
         sys.exit(1)
     except Exception:

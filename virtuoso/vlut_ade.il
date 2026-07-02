@@ -47,12 +47,30 @@ procedure(VLUTReadResults(outdir)
       close(car(p)))
     pts))
 
+procedure(VLUTPdkInventory()
+  ;; ((name title (corners...) ((dev pol (lutcorners...)) ...)) ...)
+  let((tmp p inv)
+    tmp = strcat(getShellEnvVar("HOME") "/.cache/vlut_pdks.il")
+    sh(sprintf(nil "%s pdks > %s 2>/dev/null" VLUTCli tmp))
+    p = errset(infile(tmp))
+    when(car(p)
+      inv = car(lineread(car(p)))
+      close(car(p)))
+    inv))
+
+procedure(VLUTPdkNames(inv)
+  foreach(mapcar e inv car(e)))
+
+procedure(VLUTPdkEntry(inv name)
+  car(exists(e inv car(e) == name)))
+
 ;; ---------------------------------------------------------------- job run
 procedure(VLUTWriteJob(form outdir)
   let((p fixed params sweepl)
     p = outfile(strcat(outdir "/job.json"))
     fprintf(p "{\n")
     fprintf(p " \"netlist_dir\": %s,\n" VLUTJstr(form->ndir->value))
+    fprintf(p " \"pdk\": %s,\n" VLUTJstr(form->pdksel->value))
     fprintf(p " \"corner\": %s,\n" VLUTJstr(form->corner->value))
     fprintf(p " \"w_max\": %ge-6,\n" form->wmax->value)
     fprintf(p " \"max_iter\": %d,\n" form->maxiter->value)
@@ -186,12 +204,17 @@ procedure(VLUTApplyBest()
 ;; ---------------------------------------------------------------- form/UI
 procedure(VLUT()
   unless(boundp('VLUTForm) && hiIsForm(VLUTForm)
+    let((inv names)
+      inv = VLUTPdkInventory()
+      names = VLUTPdkNames(inv) || list("default")
     hiCreateAppForm(
       ?name 'VLUTForm
       ?formTitle "VLUT gm/ID Sweep Sizing"
       ?buttonLayout 'Close
       ?fields list(
         hiCreateStringField(?name 'ndir ?prompt "ADE netlist dir" ?defValue "")
+        hiCreateCyclicField(?name 'pdksel ?prompt "PDK" ?choices names
+          ?value car(names))
         hiCreateStringField(?name 'corner ?prompt "Corner" ?defValue "tt")
         hiCreateFloatField(?name 'wmax ?prompt "Max unit W [um]" ?defValue 10.0)
         hiCreateIntField(?name 'maxiter ?prompt "Max iterations" ?defValue 8)
@@ -221,18 +244,113 @@ procedure(VLUT()
           ?callback "VLUTPlotBestWave(VLUTForm)")
         hiCreateButton(?name 'applybtn ?buttonText "Apply best to schematic"
           ?callback "VLUTApplyBest()")
-        hiCreateMLTextField(?name 'report ?prompt "Results" ?defValue ""))))
+        hiCreateButton(?name 'mgrbtn ?buttonText "PDK / LUT Manager..."
+          ?callback "VLUTMgr()")
+        hiCreateMLTextField(?name 'report ?prompt "Results" ?defValue "")))))
   hiDisplayForm(VLUTForm)
   t)
 
-;; CIW menu (once)
-unless(member('VLUTMenu hiGetBannerMenus(hiGetCIWindow()))
-  hiInsertBannerMenu(hiGetCIWindow()
-    hiCreatePulldownMenu('VLUTMenu "VLUT"
+;; ------------------------------------------------- PDK / LUT manager form
+procedure(VLUTMgrStatusText(inv pdkname)
+  let((e txt)
+    e = VLUTPdkEntry(inv pdkname)
+    if(!e then "no PDK descriptors found (add pdks/<name>.yaml)"
+    else
+      txt = sprintf(nil "PDK: %s   corners: %s\n\n%-10s %-4s %s\n"
+              cadr(e) buildString(caddr(e) " ")
+              "device" "pol" "LUT corners done")
+      foreach(d cadddr(e)
+        txt = strcat(txt sprintf(nil "%-10s %-4s %s\n"
+          car(d) cadr(d)
+          if(caddr(d) then buildString(caddr(d) " ") else "(none)"))))
+      txt)))
+
+procedure(VLUTMgrRefresh()
+  let((inv)
+    inv = VLUTPdkInventory()
+    when(boundp('VLUTMgrForm) && hiIsForm(VLUTMgrForm)
+      VLUTMgrForm->lutstatus->value =
+        VLUTMgrStatusText(inv VLUTMgrForm->mpdk->value))))
+
+procedure(VLUTMgrCharDone(_cid _status)
+  printf("VLUT: characterization finished\n")
+  VLUTMgrRefresh())
+
+procedure(VLUTMgrChar(form)
+  let((devs)
+    devs = buildString(VLUTTokens(form->chardevs->value) " ")
+    if(devs == "" then printf("VLUT: no devices given\n")
+    else
+      printf("VLUT: characterizing %s @ %s (progress below)\n"
+             devs form->charcorner->value)
+      ipcBeginProcess(
+        sprintf(nil "%s char %s %s %g %d %s"
+          VLUTCli form->mpdk->value form->charcorner->value
+          form->chartemp->value form->charnproc->value devs)
+        "" 'VLUTIpcData 'VLUTIpcData 'VLUTMgrCharDone))))
+
+procedure(VLUTMgrPdkChanged(field _scope)
+  ;; refresh status + prefill device list when the PDK cyclic changes
+  let((inv e)
+    inv = VLUTPdkInventory()
+    e = VLUTPdkEntry(inv field->value)
+    when(boundp('VLUTMgrForm) && hiIsForm(VLUTMgrForm)
+      VLUTMgrForm->lutstatus->value = VLUTMgrStatusText(inv field->value)
+      when(e
+        VLUTMgrForm->chardevs->value =
+          buildString(foreach(mapcar d cadddr(e) car(d)) " ")
+        VLUTMgrForm->charcorner->value = car(caddr(e))))))
+
+procedure(VLUTMgr()
+  let((inv names e)
+    inv = VLUTPdkInventory()
+    names = VLUTPdkNames(inv) || list("default")
+    e = VLUTPdkEntry(inv car(names))
+    unless(boundp('VLUTMgrForm) && hiIsForm(VLUTMgrForm)
+      hiCreateAppForm(
+        ?name 'VLUTMgrForm
+        ?formTitle "VLUT PDK / LUT Manager"
+        ?buttonLayout 'Close
+        ?fields list(
+          hiCreateCyclicField(?name 'mpdk ?prompt "PDK" ?choices names
+            ?value car(names) ?callback "VLUTMgrPdkChanged")
+          hiCreateMLTextField(?name 'lutstatus ?prompt "LUT status"
+            ?defValue VLUTMgrStatusText(inv car(names)))
+          hiCreateStringField(?name 'chardevs ?prompt "Devices to characterize"
+            ?defValue if(e then
+              buildString(foreach(mapcar d cadddr(e) car(d)) " ") else ""))
+          hiCreateStringField(?name 'charcorner ?prompt "Corner"
+            ?defValue if(e then car(caddr(e)) else "tt"))
+          hiCreateFloatField(?name 'chartemp ?prompt "Temp [C]"
+            ?defValue 27.0)
+          hiCreateIntField(?name 'charnproc ?prompt "Parallel Spectre jobs"
+            ?defValue 6)
+          hiCreateButton(?name 'charbtn ?buttonText "Characterize LUTs"
+            ?callback "VLUTMgrChar(VLUTMgrForm)")
+          hiCreateButton(?name 'refreshbtn ?buttonText "Refresh status"
+            ?callback "VLUTMgrRefresh()")
+          hiCreateLabel(?name 'nlab ?labelText
+            "New PDK: cp pdks/example.yaml.template pdks/<name>.yaml, edit, Refresh"))))
+    hiDisplayForm(VLUTMgrForm)
+    t))
+
+;; CIW menu (rebuilt on every load so reloads pick up new items)
+let((ciw idx i)
+  ciw = hiGetCIWindow()
+  i = 0
+  foreach(m hiGetBannerMenus(ciw)
+    when(!idx && pcreMatchp("^VLUTMenu" sprintf(nil "%L" m)) idx = i)
+    i = i + 1)
+  when(idx errset(hiDeleteBannerMenu(ciw idx)))
+  hiInsertBannerMenu(ciw
+    hiCreatePulldownMenu(gensym('VLUTMenu) "VLUT"
       list(hiCreateMenuItem(?name 'vlutOpen
              ?itemText "gm/ID Sweep Sizing..."
-             ?callback "VLUT()")))
-    length(hiGetBannerMenus(hiGetCIWindow()))))
+             ?callback "VLUT()")
+           hiCreateMenuItem(?name 'vlutMgrItem
+             ?itemText "PDK / LUT Manager..."
+             ?callback "VLUTMgr()")))
+    length(hiGetBannerMenus(ciw))))
 
 printf("VLUT ADE plugin loaded (root: %s). CIW menu: VLUT, or type VLUT()\n"
        VLUTRoot)
