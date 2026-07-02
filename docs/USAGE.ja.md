@@ -241,8 +241,11 @@ virtuoso/install_plugin.sh --uninstall
    - **手動**: **…or Browse netlist dir** で `input.scs` のあるフォルダを
      選び、**Re-scan devices/nets** で解析。
 2. **PDK / Corner** をドロップダウンで選択(コーナーは PDK に追従)。
-3. **Sweep devices**(リストで複数選択)+ **Sweep gm/ID values**(数字)+
-   **Sweep L**(数字)。
+3. **スイープグループ**(複数可): デバイスをリスト選択し、gm/ID の値リスト
+   （`8 12 16`）と L を入力 → **Add sweep group** で追加。複数グループを追加
+   すれば**同時にスイープ**できます。**Combine** で組み合わせ方を選択:
+   - `product` = 全組み合わせ（入れ子の 2 次元以上スイープ）
+   - `zip` = 各グループを同じ長さのリストで**同時に**進める（ロックステップ）
 4. **Fixed devices**(リスト選択)+ **Fixed gm/ID / L**(数字)+
    **Add fixed group** で固定グループを追加(複数可、**Clear** で消去)。
 5. **Analysis**(ac/tran/dc)、**Metric**(DC利得・位相余裕・GBW・

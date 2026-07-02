@@ -70,14 +70,51 @@ def _match_items(nd, names):
     return [it for it in nd.mos_items if it.name in names]
 
 
+def _sweep_points(job):
+    """Expand one or more sweep groups into a list of points.
+
+    Each point is a list of (devices, gmid, l) assignments. Groups are
+    combined by 'sweep_mode': 'product' (nested, every combination) or
+    'zip' (lockstep, groups advance together). Back-compatible with the
+    old single 'sweep' key.
+    """
+    import itertools
+    groups = job.get("sweeps")
+    if not groups and job.get("sweep"):
+        groups = [job["sweep"]]
+    groups = [g for g in (groups or []) if g.get("devices")]
+    if not groups:
+        return [[]]                      # one point, no sweep assignment
+    vlists = [list(g.get("gmid") or [None]) for g in groups]
+    mode = job.get("sweep_mode", "product")
+    if mode == "zip":
+        n = min(len(v) for v in vlists)
+        combos = [tuple(v[i] for v in vlists) for i in range(n)]
+    else:
+        combos = list(itertools.product(*vlists))
+    points = []
+    for combo in combos:
+        assigns = []
+        for g, gv in zip(groups, combo):
+            assigns.append((g["devices"], gv,
+                            float(g["l"]) if g.get("l") else None))
+        points.append(assigns)
+    return points
+
+
+def _point_label(assigns):
+    return "; ".join("%s=%g" % ("/".join(devs), gv)
+                     for devs, gv, _ in assigns if gv is not None) or "-"
+
+
 def run(jobfile):
     job = json.load(open(jobfile))
     outdir = job["outdir"]
     os.makedirs(outdir, exist_ok=True)
     pdk = pdkmod.get(job.get("pdk"))
     corner = job.get("corner", pdk.default_corner)
-    sweep = job.get("sweep") or {}
-    values = sweep.get("gmid") or [None]
+    sweep_points = _sweep_points(job)
+    npts = len(sweep_points)
     points = []
     status_path = os.path.join(outdir, "status.txt")
 
@@ -86,9 +123,10 @@ def run(jobfile):
             f.write(msg + "\n")
         print(msg, flush=True)
 
-    for i, gv in enumerate(values):
+    for i, assigns in enumerate(sweep_points):
         tag = "pt%02d" % i
-        status("[%d/%d] gm/ID=%s sizing..." % (i + 1, len(values), gv))
+        label = _point_label(assigns)
+        status("[%d/%d] %s sizing..." % (i + 1, npts, label))
         nd = NetlistDesign(job["netlist_dir"], pdk=pdk, corner=corner,
                            w_max=float(job.get("w_max", 10e-6)))
         nd.dd.dir = _repoint(nd, job, tag)
@@ -97,35 +135,42 @@ def run(jobfile):
             for it in _match_items(nd, f["devices"]):
                 it.target_gmid = float(f["gmid"])
                 it.target_l = float(f["l"]) if f.get("l") else None
-        if gv is not None:
-            for it in _match_items(nd, sweep["devices"]):
+        for devs, gv, lv in assigns:
+            if gv is None:
+                continue
+            for it in _match_items(nd, devs):
                 it.target_gmid = float(gv)
-                it.target_l = (float(sweep["l"])
-                               if sweep.get("l") else None)
+                it.target_l = lv
         ok, niter = nd.iterate(max_iter=int(job.get("max_iter", 8)),
                                tol=0.02)
         status("[%d/%d] sized (converged=%s, %d iters), running analyses..."
-               % (i + 1, len(values), ok, niter))
+               % (i + 1, npts, ok, niter))
         psf = nd.dd.run_full(tag)
         sizes = [dict(subckt=it.subckt or "", name=it.name, model=it.master,
                       w=it.w, l=it.l, m=it.m,
                       ids=it.op.get("ids"), gmid=it.op.get("gmid"))
                  for it in nd.mos_items]
-        points.append(dict(index=i, gmid=gv, converged=ok, iters=niter,
+        # primary x-axis value for plotting: first swept group's gm/ID
+        xval = next((gv for _, gv, _ in assigns if gv is not None), i)
+        points.append(dict(index=i, x=xval, label=label,
+                           groups=[dict(devices=d, gmid=g, l=l)
+                                   for d, g, l in assigns],
+                           converged=ok, iters=niter,
                            psf=psf, sizes=sizes,
                            cellinfo={k or "": list(v) for k, v in
                                      nd.cellinfo.items()}))
-        status("[%d/%d] done -> %s" % (i + 1, len(values), psf))
+        status("[%d/%d] done -> %s" % (i + 1, npts, psf))
 
     res = dict(job=job, points=points)
     with open(os.path.join(outdir, "results.json"), "w") as f:
         json.dump(res, f, indent=1)
     # SKILL-readable summary (single line for lineread):
-    # ((index gmid converged psfdir) ...)
+    # ((index xval label converged psfdir) ...)
     with open(os.path.join(outdir, "results.il"), "w") as f:
         f.write("(" + " ".join(
-            "(%d %s %s %s)"
-            % (p["index"], p["gmid"] if p["gmid"] is not None else 0,
+            "(%d %s %s %s %s)"
+            % (p["index"], p["x"] if p["x"] is not None else p["index"],
+               _skill_str(p["label"]),
                "t" if p["converged"] else "nil", _skill_str(p["psf"]))
             for p in points) + ")\n")
     status("ALL DONE")

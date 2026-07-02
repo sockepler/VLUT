@@ -73,9 +73,8 @@ device / net / metric are all dropdowns or listboxes.
 | Max unit W [um] | number — total W is split into `m` parallel units below this |
 | Max iterations | number — sizing-loop cap per sweep point |
 | Design variables | typed `A=1 CL=2p` (ADE design-variable overrides) |
-| Sweep devices | **listbox** (multi-select) of scanned devices |
-| Sweep gm/ID values | numbers, e.g. `8 12 16 20` |
-| Sweep L [um] | number (0 = keep current L) |
+| Sweep devices + gm/ID values + L + **Add sweep group** | pick devices, type a list of gm/ID values (`8 12 16`) and L, press Add — appended to the read-only "Sweep groups" box. Add **several** groups to sweep multiple device sets at once. |
+| Combine | `product` = every combination of the groups (nested 2-D+ sweep); `zip` = groups advance in lockstep (same-length lists, swept together) |
 | Fixed devices + gm/ID + L + **Add fixed group** | pick devices in the listbox, type gm/ID and L numbers, press Add — the group is appended to the read-only "Fixed groups" box (repeat for more groups; **Clear** resets) |
 | Analysis | dropdown (`ac`/`tran`/`dc`) |
 | Metric + on net | metric **type** dropdown (DC gain, phase margin, GBW, unity-gain freq, bandwidth, peak-to-peak, …) composed with a **net** dropdown → e.g. `phaseMargin(v("out"))` |

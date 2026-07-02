@@ -63,6 +63,18 @@ procedure(VLUTParseFixedLine(line)
         (t unless(gmid gmid = tok))))
     if(devs && gmid then list(reverse(devs) gmid lum) else nil)))
 
+procedure(VLUTParseSweepLine(line)
+  ;; "M1 M2 : 8 12 16 L=0.5" -> list(devices (gmid...) lumStr|nil)
+  let((toks devs vals lum sep)
+    toks = VLUTTokens(line)
+    foreach(tok toks
+      cond(
+        (tok == ":" sep = t)
+        (!sep devs = cons(tok devs))
+        (pcreMatchp("^[Ll]=" tok) lum = cadr(parseString(tok "=")))
+        (t vals = cons(tok vals))))
+    if(devs && vals then list(reverse(devs) reverse(vals) lum) else nil)))
+
 procedure(VLUTDevsJson(devs)
   buildString(foreach(mapcar d devs VLUTJstr(d)) ","))
 
@@ -93,7 +105,7 @@ procedure(VLUTPdkEntry(inv name)
 
 ;; ---------------------------------------------------------------- job run
 procedure(VLUTWriteJob(form outdir)
-  let((p fixed params sweepl)
+  let((p fixed params sweeps)
     p = outfile(strcat(outdir "/job.json"))
     fprintf(p "{\n")
     fprintf(p " \"netlist_dir\": %s,\n" VLUTJstr(form->ndir->value))
@@ -115,13 +127,17 @@ procedure(VLUTWriteJob(form outdir)
             if(caddr(f) then sprintf(nil ", \"l\": %se-6" caddr(f)) else ""))
             fixed))))
     fprintf(p " \"fixed\": [%s],\n" buildString(reverse(fixed) ","))
-    sweepl = form->sweepl->value    ;; float field: 0 = keep current L
-    ;; sweepdevs is a listbox -> value is already a list of device names
-    fprintf(p " \"sweep\": {\"devices\": [%s], \"gmid\": [%s]%s}\n"
-      VLUTDevsJson(form->sweepdevs->value)
-      buildString(VLUTTokens(form->sweepvals->value) ",")
-      if(numberp(sweepl) && sweepl > 0.0
-         then sprintf(nil ", \"l\": %ge-6" sweepl) else ""))
+    ;; sweep groups, one per line: "M1 M2 : 8 12 16 L=0.5"
+    sweeps = nil
+    foreach(line parseString(form->sweeps->value "\n")
+      let((s) s = VLUTParseSweepLine(line)
+        when(s
+          sweeps = cons(sprintf(nil "{\"devices\": [%s], \"gmid\": [%s]%s}"
+            VLUTDevsJson(car(s)) buildString(cadr(s) ",")
+            if(caddr(s) then sprintf(nil ", \"l\": %se-6" caddr(s)) else ""))
+            sweeps))))
+    fprintf(p " \"sweeps\": [%s],\n" buildString(reverse(sweeps) ","))
+    fprintf(p " \"sweep_mode\": %s\n" VLUTJstr(form->sweepmode->value))
     fprintf(p "}\n")
     close(p)))
 
@@ -158,32 +174,34 @@ procedure(VLUTSelectAnalysis(aname)
     sym))
 
 procedure(VLUTEvalResults()
-  let((outdir aname metric goal pts rows best bestval val txt xs ys idx gmid conv psf)
+  ;; results.il point = (index xval label converged psfdir)
+  let((outdir aname metric goal pts rows best bestval val txt xs ys
+       idx xv label conv psf)
     outdir = nth(0 VLUTState)  aname = nth(1 VLUTState)
     metric = nth(2 VLUTState)  goal  = nth(3 VLUTState)
     pts = VLUTReadResults(outdir)
     if(!pts then printf("VLUT: no results in %s\n" outdir)
     else
       foreach(pt pts
-        idx = nth(0 pt)  gmid = nth(1 pt)
-        conv = nth(2 pt) psf  = nth(3 pt)
+        idx = nth(0 pt)  xv = nth(1 pt)  label = nth(2 pt)
+        conv = nth(3 pt) psf = nth(4 pt)
         val = nil
         when(car(errset(openResults(psf)))
           when(VLUTSelectAnalysis(aname)
             val = car(errset(evalstring(metric)))))
         unless(numberp(val) val = nil)
         when(val
-          xs = cons(float(gmid) xs)
+          xs = cons(float(xv) xs)
           ys = cons(float(val) ys)
           when(!best || if(goal == "maximize" then val > bestval
                                               else val < bestval)
             best = idx  bestval = val))
-        rows = cons(list(idx gmid conv val) rows))
+        rows = cons(list(idx label conv val) rows))
       rows = reverse(rows)
-      txt = sprintf(nil "%-5s %-8s %-6s %-16s\n" "pt" "gm/ID" "conv" "metric")
+      txt = sprintf(nil "%-4s %-22s %-5s %-16s\n" "pt" "sweep" "conv" "metric")
       foreach(r rows
-        txt = strcat(txt sprintf(nil "%-5s %-8s %-6s %-16s%s\n"
-          sprintf(nil "%L" nth(0 r)) sprintf(nil "%L" nth(1 r))
+        txt = strcat(txt sprintf(nil "%-4s %-22s %-5s %-16s%s\n"
+          sprintf(nil "%L" nth(0 r)) nth(1 r)
           if(nth(2 r) then "yes" else "NO")
           sprintf(nil "%L" nth(3 r))
           if(nth(0 r) == best then "  <== BEST" else ""))))
@@ -203,7 +221,7 @@ procedure(VLUTPlotMetric()
       wave = drCreateWaveform(drCreateVec('double xs) drCreateVec('double ys))
       win = awvCreatePlotWindow()
       awvPlotWaveform(win wave)
-      errset(awvSetXAxisLabel(win "gm/ID target"))
+      errset(awvSetXAxisLabel(win "gm/ID (1st swept group)"))
       errset(awvSetYAxisLabel(win metric)))))
 
 procedure(VLUTPlotBestWave(form)
@@ -214,7 +232,7 @@ procedure(VLUTPlotBestWave(form)
     if(!best && best != 0 then printf("VLUT: run a sweep first\n")
     else
       pts = VLUTReadResults(outdir)
-      psf = nth(3 nth(best pts))
+      psf = nth(4 nth(best pts))    ;; point = (idx x label conv psf)
       openResults(psf)
       VLUTSelectAnalysis(aname)
       win = awvCreatePlotWindow()
@@ -264,9 +282,8 @@ procedure(VLUTSaveVals(form)
     list('wmax       form->wmax->value)
     list('maxiter    form->maxiter->value)
     list('params     form->params->value)
-    list('sweepdevs  form->sweepdevs->value)
-    list('sweepvals  form->sweepvals->value)
-    list('sweepl     form->sweepl->value)
+    list('sweeps     form->sweeps->value)
+    list('sweepmode  form->sweepmode->value)
     list('fixed      form->fixed->value)
     list('analysis   form->analysis->value)
     list('metrictype form->metrictype->value)
@@ -385,6 +402,23 @@ procedure(VLUTAddFixed(form)
 
 procedure(VLUTClearFixed(form) form->fixed->value = "")
 
+procedure(VLUTAddSweep(form)
+  ;; append a sweep group (devices + a list of gm/ID values) to the summary
+  let((devs vals g txt)
+    devs = form->swdevs->value
+    vals = form->swvals->value
+    if(!devs || vals == "" then
+      printf("VLUT: select sweep devices and enter gm/ID values\n")
+    else
+      g = sprintf(nil "%s : %s%s"
+            buildString(devs " ") vals
+            if(form->swl->value > 0.0
+               then sprintf(nil " L=%g" form->swl->value) else ""))
+      txt = form->sweeps->value
+      form->sweeps->value = if(txt == "" then g else strcat(txt "\n" g)))))
+
+procedure(VLUTClearSweep(form) form->sweeps->value = "")
+
 procedure(VLUTBuildForm(saved)
   let((names corners devs nets mlabels wlabels)
     names = VLUTPdkNames(VLUTPdkInventory()) || list("default")
@@ -422,14 +456,22 @@ procedure(VLUTBuildForm(saved)
         hiCreateStringField(?name 'params
           ?prompt "Design variables (A=1 CL=2p)"
           ?value VLUTGet(saved 'params ""))
-        ;; ---- sweep group (device listbox + numeric values) ----
-        hiCreateListBoxField(?name 'sweepdevs ?prompt "Sweep devices"
-          ?choices devs ?multipleSelect t
-          ?value VLUTSubsetOf(saved 'sweepdevs devs))
-        hiCreateStringField(?name 'sweepvals ?prompt "Sweep gm/ID values"
-          ?value VLUTGet(saved 'sweepvals "8 12 16 20"))
-        hiCreateFloatField(?name 'sweepl ?prompt "Sweep L [um] (0=keep)"
-          ?value VLUTGet(saved 'sweepl 0.0))
+        ;; ---- sweep-group builder (multiple groups, swept together) ----
+        hiCreateListBoxField(?name 'swdevs ?prompt "Sweep devices"
+          ?choices devs ?multipleSelect t)
+        hiCreateStringField(?name 'swvals ?prompt "Sweep gm/ID values"
+          ?value "8 12 16 20")
+        hiCreateFloatField(?name 'swl ?prompt "Sweep L [um] (0=keep)"
+          ?value 0.0)
+        hiCreateButton(?name 'addswbtn ?buttonText "Add sweep group"
+          ?callback "VLUTAddSweep(VLUTForm)")
+        hiCreateButton(?name 'clrswbtn ?buttonText "Clear"
+          ?callback "VLUTClearSweep(VLUTForm)")
+        hiCreateMLTextField(?name 'sweeps ?prompt "Sweep groups" ?editable nil
+          ?value VLUTGet(saved 'sweeps ""))
+        hiCreateCyclicField(?name 'sweepmode ?prompt "Combine"
+          ?choices list("product" "zip")
+          ?value VLUTOneOf(saved 'sweepmode list("product" "zip")))
         ;; ---- fixed-group builder ----
         hiCreateListBoxField(?name 'fixdevs ?prompt "Fixed devices"
           ?choices devs ?multipleSelect t)
