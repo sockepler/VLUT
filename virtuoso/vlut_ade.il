@@ -115,12 +115,13 @@ procedure(VLUTWriteJob(form outdir)
             if(caddr(f) then sprintf(nil ", \"l\": %se-6" caddr(f)) else ""))
             fixed))))
     fprintf(p " \"fixed\": [%s],\n" buildString(reverse(fixed) ","))
-    sweepl = form->sweepl->value
+    sweepl = form->sweepl->value    ;; float field: 0 = keep current L
     ;; sweepdevs is a listbox -> value is already a list of device names
     fprintf(p " \"sweep\": {\"devices\": [%s], \"gmid\": [%s]%s}\n"
       VLUTDevsJson(form->sweepdevs->value)
       buildString(VLUTTokens(form->sweepvals->value) ",")
-      if(sweepl != "" then sprintf(nil ", \"l\": %se-6" sweepl) else ""))
+      if(numberp(sweepl) && sweepl > 0.0
+         then sprintf(nil ", \"l\": %ge-6" sweepl) else ""))
     fprintf(p "}\n")
     close(p)))
 
